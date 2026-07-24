@@ -1,0 +1,9 @@
+{
+  "name": "現場 顔動画コンディションチェック",
+  "short_name": "顔動画チェック",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#eef2f7",
+  "theme_color": "#0f172a",
+  "icons": []
+}
