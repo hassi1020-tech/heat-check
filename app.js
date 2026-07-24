@@ -392,6 +392,7 @@ $("saveResult").addEventListener("click",()=>{
   alert("結果を端末内に保存しました。顔画像・動画は保存していません。");
   updateSummary();
   populateWorkerSelect();
+  renderAdminDashboard();
 });
 $("remeasure").addEventListener("click",()=>{ $("resultCard").classList.add("hidden"); startMeasure(); });
 $("startMeasure").onclick=function(e){
@@ -605,8 +606,155 @@ function renderWorkerCard(){
   }
   drawTrendChart(list);
 }
+
+function selectedAdminDate(){
+  const el=$("adminDate");
+  return el&&el.value ? el.value : new Date().toISOString().slice(0,10);
+}
+
+function filteredAdminRecords(){
+  const date=selectedAdminDate();
+  const site=$("adminSite")?.value||"";
+  const level=$("adminLevel")?.value||"";
+  return records().filter(r=>{
+    const dateOk=(r.timestamp||"").slice(0,10)===date;
+    const siteOk=!site||r.siteName===site;
+    const levelOk=!level||r.level===level;
+    return dateOk&&siteOk&&levelOk;
+  });
+}
+
+function populateAdminSites(){
+  const select=$("adminSite");
+  if(!select)return;
+  const current=select.value;
+  const sites=[...new Set(records().map(r=>r.siteName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  select.innerHTML='<option value="">すべての現場</option>'+
+    sites.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+  if(sites.includes(current))select.value=current;
+}
+
+function latestByWorker(list){
+  const map=new Map();
+  list.forEach(r=>{
+    const prev=map.get(r.workerId);
+    if(!prev||Date.parse(r.timestamp)>Date.parse(prev.timestamp))map.set(r.workerId,r);
+  });
+  return [...map.values()];
+}
+
+function renderAttentionList(){
+  const box=$("attentionList");
+  if(!box)return;
+  const list=latestByWorker(filteredAdminRecords())
+    .filter(r=>["yellow","orange","red"].includes(r.level))
+    .sort((a,b)=>levelRank(b.level)-levelRank(a.level)||Date.parse(b.timestamp)-Date.parse(a.timestamp));
+
+  if(!list.length){
+    box.textContent="該当者なし";
+    return;
+  }
+
+  box.innerHTML=list.map(r=>`
+    <div class="attention-item ${r.level}">
+      <strong>${esc(r.workerName||r.workerId)}（${esc(r.workerId)}）</strong>
+      <span>${esc(r.siteName)}／${esc(r.label)}／${new Date(r.timestamp).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}</span>
+      <div>${esc(r.instruction||"管理者が本人を確認してください。")}</div>
+    </div>`).join("");
+}
+
+function renderDailySummary(){
+  const box=$("dailySummary");
+  if(!box)return;
+  const list=filteredAdminRecords();
+  const uniqueWorkers=new Set(list.map(r=>r.workerId).filter(Boolean));
+  const levels={green:0,yellow:0,orange:0,red:0};
+  list.forEach(r=>{if(levels[r.level]!==undefined)levels[r.level]++;});
+  const avgWbgt=list.filter(r=>Number.isFinite(Number(r.context?.wbgt)))
+    .map(r=>Number(r.context.wbgt));
+  const avgWbgtText=avgWbgt.length?(avg(avgWbgt)).toFixed(1):"--";
+
+  box.innerHTML=`
+    <div class="daily-summary-grid">
+      <div><span>測定件数</span><strong>${list.length}</strong></div>
+      <div><span>測定人数</span><strong>${uniqueWorkers.size}</strong></div>
+      <div><span>平均WBGT</span><strong>${avgWbgtText}</strong></div>
+      <div><span>要対応件数</span><strong>${levels.yellow+levels.orange+levels.red}</strong></div>
+      <div><span>緑</span><strong>${levels.green}</strong></div>
+      <div><span>黄</span><strong>${levels.yellow}</strong></div>
+      <div><span>橙</span><strong>${levels.orange}</strong></div>
+      <div><span>赤</span><strong>${levels.red}</strong></div>
+    </div>`;
+}
+
+function checkMissingWorkers(){
+  const box=$("missingList");
+  const raw=$("expectedWorkers")?.value||"";
+  const expected=[...new Set(raw.split(/\r?\n|,|、/).map(s=>s.trim()).filter(Boolean))];
+  if(!expected.length){
+    box.textContent="対象作業員IDを入力してください。";
+    return;
+  }
+
+  const measured=new Set(filteredAdminRecords().map(r=>r.workerId));
+  const missing=expected.filter(id=>!measured.has(id));
+
+  if(!missing.length){
+    box.textContent="入力された対象者は全員測定済みです。";
+    return;
+  }
+  box.innerHTML=missing.map(id=>`
+    <div class="missing-item">
+      <strong>${esc(id)}</strong>
+      <span>${esc(selectedAdminDate())}の測定記録がありません。</span>
+    </div>`).join("");
+}
+
+function renderAdminDashboard(){
+  populateAdminSites();
+  renderAttentionList();
+  renderDailySummary();
+}
+
+function exportDailyCsv(){
+  const list=filteredAdminRecords();
+  if(!list.length){
+    alert("対象条件の保存済みデータがありません。");
+    return;
+  }
+
+  const headers=[
+    "日時","現場","作業員ID","作業員名","区分","判定",
+    "顔色変化","赤み変化","顔の動き","映像品質","左右差",
+    "WBGT","作業強度","水分補給","本人申告","管理指示"
+  ];
+  const rows=[headers,...list.map(r=>[
+    new Date(r.timestamp).toLocaleString("ja-JP"),
+    r.siteName,r.workerId,r.workerName,r.timing,r.label,
+    r.colorChange?.toFixed?.(2)??r.colorChange??"",
+    r.rednessChange?.toFixed?.(2)??r.rednessChange??"",
+    r.motionLabel||"",
+    r.qualityLabel||"",
+    r.asymmetry?.toFixed?.(2)??r.asymmetry??"",
+    r.context?.wbgt??"",
+    r.context?.workload??"",
+    r.context?.hydration??"",
+    r.context?.selfCondition??"",
+    r.instruction||""
+  ])];
+
+  const csv=rows.map(row=>row.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\r\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  const site=$("adminSite")?.value||"全現場";
+  a.download=`暑熱チェック日報_${selectedAdminDate()}_${site}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 function renderDashboard(){
   updateSummary();
+  renderAdminDashboard();
   populateWorkerSelect();
   const rs=records().sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp));
   const counts={green:0,yellow:0,orange:0,red:0};rs.forEach(r=>counts[r.level]++);
@@ -622,6 +770,15 @@ function renderDashboard(){
   renderWorkerCard();
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+
+if($("adminDate")){
+  $("adminDate").value=new Date().toISOString().slice(0,10);
+  $("adminDate").addEventListener("change",renderAdminDashboard);
+}
+if($("adminSite"))$("adminSite").addEventListener("change",renderAdminDashboard);
+if($("adminLevel"))$("adminLevel").addEventListener("change",renderAdminDashboard);
+if($("checkMissing"))$("checkMissing").addEventListener("click",checkMissingWorkers);
+if($("exportDailyCsv"))$("exportDailyCsv").addEventListener("click",exportDailyCsv);
 
 if($("workerSelect")){
   $("workerSelect").addEventListener("change",renderWorkerCard);
@@ -651,7 +808,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v9.1プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v9.2プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f172a">
   <title>現場 顔動画コンディションチェック</title>
-  <link rel="manifest" href="manifest.webmanifest?v=91">
-  <link rel="stylesheet" href="styles.css?v=91">
+  <link rel="manifest" href="manifest.webmanifest?v=92">
+  <link rel="stylesheet" href="styles.css?v=92">
 </head>
 <body>
 <header>
@@ -156,7 +156,59 @@
       <div class="summary-card red"><span>赤</span><strong id="sumRed">0</strong></div>
     </div>
 
-    <div class="worker-record-card">
+    
+    <div class="admin-panel">
+      <div class="toolbar admin-toolbar">
+        <div>
+          <h3>管理者ダッシュボード</h3>
+          <p>現場・日付・判定で絞り込み、要対応者と測定漏れを確認します。</p>
+        </div>
+        <div class="admin-filters">
+          <label>対象日
+            <input id="adminDate" type="date">
+          </label>
+          <label>現場
+            <select id="adminSite">
+              <option value="">すべての現場</option>
+            </select>
+          </label>
+          <label>判定
+            <select id="adminLevel">
+              <option value="">すべて</option>
+              <option value="green">緑</option>
+              <option value="yellow">黄</option>
+              <option value="orange">橙</option>
+              <option value="red">赤</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="admin-action-grid">
+        <div class="admin-box">
+          <h4>要対応者</h4>
+          <div id="attentionList" class="attention-list">該当者なし</div>
+        </div>
+        <div class="admin-box">
+          <h4>測定漏れ確認</h4>
+          <div class="missing-controls">
+            <textarea id="expectedWorkers" rows="5" placeholder="対象作業員IDを1行ずつ入力&#10;例：&#10;A001&#10;A002&#10;A003"></textarea>
+            <button id="checkMissing" type="button">測定漏れを確認</button>
+          </div>
+          <div id="missingList" class="missing-list">対象者を入力してください。</div>
+        </div>
+      </div>
+
+      <div class="daily-summary-card">
+        <div class="daily-summary-head">
+          <h4>日別集計</h4>
+          <button id="exportDailyCsv" type="button">日報用CSV出力</button>
+        </div>
+        <div id="dailySummary" class="daily-summary">保存済みデータを集計します。</div>
+      </div>
+    </div>
+
+<div class="worker-record-card">
       <div class="toolbar worker-toolbar">
         <div>
           <h3>作業員別カルテ</h3>
@@ -254,7 +306,7 @@
 </section>
 </main>
 
-<footer>Prototype v9.1（作業員カルテ・履歴分析版）</footer>
-<script src="app.js?v=91"></script>
+<footer>Prototype v9.2（管理者ダッシュボード・帳票版）</footer>
+<script src="app.js?v=92"></script>
 </body>
 </html>
