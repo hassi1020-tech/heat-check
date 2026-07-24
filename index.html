@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f172a">
   <title>現場 顔動画コンディションチェック</title>
-  <link rel="manifest" href="manifest.webmanifest?v=6">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="manifest" href="manifest.webmanifest?v=7">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 <header>
@@ -45,6 +45,43 @@
     </label>
   </div>
 
+
+  <div class="card">
+    <h2 class="subhead">現場条件・本人申告</h2>
+    <div class="form-grid">
+      <label>WBGT（任意）
+        <input id="wbgt" type="number" min="0" max="50" step="0.1" placeholder="例：28.5">
+      </label>
+      <label>作業強度
+        <select id="workload">
+          <option value="low">軽作業</option>
+          <option value="medium" selected>中作業</option>
+          <option value="high">重作業</option>
+        </select>
+      </label>
+      <label>直近30分の水分補給
+        <select id="hydration">
+          <option value="yes">あり</option>
+          <option value="little">少量</option>
+          <option value="no">なし</option>
+        </select>
+      </label>
+      <label>体調申告
+        <select id="selfCondition">
+          <option value="normal">異常なし</option>
+          <option value="slight">少し気になる</option>
+          <option value="bad">明らかに体調が悪い</option>
+        </select>
+      </label>
+    </div>
+    <div class="symptoms">
+      <label><input type="checkbox" id="symDizzy"> めまい・ふらつき</label>
+      <label><input type="checkbox" id="symNausea"> 吐き気・頭痛</label>
+      <label><input type="checkbox" id="symCramp"> 筋肉のけいれん</label>
+      <label><input type="checkbox" id="symConfusion"> 受け答えがおかしい</label>
+    </div>
+  </div>
+
   <div class="card camera-card">
     <div class="camera-wrap">
       <video id="video" playsinline muted></video>
@@ -54,6 +91,7 @@
     <div class="meter-row">
       <div><span>残り</span><strong id="countdown">準備</strong></div>
       <div><span>信号品質</span><strong id="quality">未測定</strong></div>
+      <div><span>脈拍安定性</span><strong id="stability">--</strong></div>
       <div><span>推定脈拍</span><strong id="bpmLive">--</strong></div>
     </div>
     <div class="actions">
@@ -79,6 +117,8 @@
       <div><span>動き</span><strong id="resultMotion">--</strong></div>
       <div><span>信号品質</span><strong id="resultQuality">--</strong></div>
       <div><span>基準値</span><strong id="resultBaseline">--</strong></div>
+      <div><span>脈拍安定性</span><strong id="resultStability">--</strong></div>
+      <div><span>WBGT・申告</span><strong id="resultContext">--</strong></div>
     </div>
     <div id="instruction" class="instruction"></div>
     <div class="actions">
@@ -149,12 +189,13 @@
       <li>「緑」は安全や就業可能を保証しません。</li>
       <li>本人に異常がある場合、アプリ結果に関係なく作業を中止し、管理者が確認してください。</li>
       <li>顔画像・動画は保存しません。数値化した結果のみ端末内に保存します。</li>
+      <li>通常カメラから皮膚温・発汗量を直接測定することはできません。本版では推定表示しません。</li>
     </ul>
   </div>
 </section>
 </main>
 
-<footer>Prototype v6.0（キャッシュ完全回避版）</footer>
-<script src="app.js?v=6"></script>
+<footer>Prototype v7.0（精度・総合判定改良版）</footer>
+<script src="app.js?v=7"></script>
 </body>
 </html>

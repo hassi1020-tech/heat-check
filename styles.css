@@ -58,3 +58,9 @@ hr{border:0;border-top:1px solid var(--line);margin:22px 0}
   .nav{white-space:nowrap}
   .result-head,.toolbar{align-items:flex-start;flex-direction:column}
 }
+
+.subhead{margin-top:0}
+.symptoms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.symptoms label{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:9px;background:#f8fafc;color:var(--text)}
+.symptoms input{width:auto;margin:0}
+@media(max-width:700px){.symptoms{grid-template-columns:1fr}}
