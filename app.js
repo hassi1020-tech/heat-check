@@ -1,4 +1,126 @@
 
+function aiCommentFactors(r,score){
+  const factors=[];
+  const wbgt=Number(r.context?.wbgt);
+  if(Number.isFinite(wbgt)){
+    if(wbgt>=31)factors.push(`WBGT ${wbgt.toFixed(1)}で、暑熱負荷が高い環境です。`);
+    else if(wbgt>=28)factors.push(`WBGT ${wbgt.toFixed(1)}で、注意が必要な環境です。`);
+    else factors.push(`WBGT ${wbgt.toFixed(1)}は入力範囲では比較的低めです。`);
+  }else{
+    factors.push("WBGTが未入力のため、環境条件を十分に評価できていません。");
+  }
+
+  if(Number(r.colorChange)>=20)factors.push("本人の通常時と比べて、顔色の変化が大きめです。");
+  else if(Number(r.colorChange)>=10)factors.push("本人の通常時と比べて、顔色にやや変化があります。");
+
+  if(Number(r.asymmetry)>=15)factors.push("顔の左右差が大きめに検出されました。");
+  if(Number(r.avgMotion)<=1.5)factors.push("測定中の顔の動きが少なめでした。");
+  if(Number(r.quality)<45)factors.push("撮影品質が低めのため、結果の確実性が下がっています。");
+
+  const hydration=String(r.context?.hydration||"");
+  if(hydration.includes("なし"))factors.push("水分補給なしと入力されています。");
+  else if(hydration.includes("少"))factors.push("水分補給量が少なめと入力されています。");
+
+  const self=String(r.context?.selfReport||r.context?.condition||"");
+  if(/悪|つら|不調|異常|だる|吐|頭痛|めまい/.test(self)){
+    factors.push("本人申告に体調不良を示す内容があります。");
+  }
+
+  if(!factors.length){
+    factors.push("顔状態、入力条件ともに大きな注意要因は確認されていません。");
+  }
+  return factors.slice(0,5);
+}
+
+function aiCommentActions(r,score){
+  if(score>=80||r.level==="red"){
+    return [
+      "作業を中止し、涼しい場所へ移動してください。",
+      "管理者が直ちに意識・会話・歩行状態を対面確認してください。",
+      "強い症状や反応異常がある場合は、現場の緊急対応手順に従ってください。"
+    ];
+  }
+  if(score>=60||r.level==="orange"){
+    return [
+      "いったん作業から離れ、涼しい場所で休憩してください。",
+      "水分・塩分補給を行い、管理者が本人の状態を確認してください。",
+      "状態が改善しない場合は作業へ戻さないでください。"
+    ];
+  }
+  if(score>=35||r.level==="yellow"){
+    return [
+      "早めに水分・塩分補給を行ってください。",
+      "作業強度を下げ、近い時間に再測定してください。",
+      "本人に頭痛、吐き気、めまい、強いだるさがないか確認してください。"
+    ];
+  }
+  return [
+    "現時点では通常監視を継続してください。",
+    "決められた間隔で水分・塩分補給を行ってください。",
+    "本人が異常を感じた場合は、判定に関係なく管理者へ申し出てください。"
+  ];
+}
+
+function aiResultTitle(r,score){
+  if(score>=80||r.level==="red")return "危険度が非常に高い状態です";
+  if(score>=60||r.level==="orange")return "作業を離れて確認が必要です";
+  if(score>=35||r.level==="yellow")return "注意して早めに再確認してください";
+  return "現時点で大きな注意変化はありません";
+}
+
+function aiResultSummary(r,score){
+  const name=r.workerName||r.workerId||"対象者";
+  if(score>=80||r.level==="red"){
+    return `${name}さんは、入力条件と顔状態の評価から非常に高い注意状態です。アプリの再測定より先に、作業中止と管理者による対面確認を優先してください。`;
+  }
+  if(score>=60||r.level==="orange"){
+    return `${name}さんは、暑熱環境または本人の状態に複数の注意要因があります。作業から一度離れ、休憩・補給・対面確認を行ってください。`;
+  }
+  if(score>=35||r.level==="yellow"){
+    return `${name}さんは、通常時と比べて注意が必要な変化があります。水分補給と作業負荷の調整を行い、近い時間に再確認してください。`;
+  }
+  return `${name}さんは、今回の測定では大きな注意変化は確認されていません。ただし、本人の体調申告や現場状況を優先して通常監視を続けてください。`;
+}
+
+function aiRecheckText(r,score){
+  if(score>=80||r.level==="red")return "再測定を待たず、直ちに対面確認";
+  if(score>=60||r.level==="orange")return "休憩開始後、15～30分を目安に再確認";
+  if(score>=35||r.level==="yellow")return "30～60分以内、または状態変化時に再測定";
+  return "通常の測定予定時刻。ただし本人申告があれば即時確認";
+}
+
+function aiManagerText(r,score){
+  if(score>=80||r.level==="red")return "必須：直ちに管理者へ連絡";
+  if(score>=60||r.level==="orange")return "必須：管理者が本人を対面確認";
+  if(score>=35||r.level==="yellow")return "推奨：班長または管理者へ共有";
+  return "通常：異常申告がある場合のみ連絡";
+}
+
+function renderAiResultComment(r){
+  const panel=$("aiResultPanel");
+  if(!panel||!r)return;
+
+  const history=records().filter(x=>x.workerId===r.workerId);
+  const score=Number.isFinite(Number(r.riskScore))
+    ?Number(r.riskScore)
+    :numericRiskScore(r,history);
+
+  panel.classList.remove("result-hidden","level-green","level-yellow","level-orange","level-red");
+  panel.classList.add(`level-${r.level||"green"}`);
+
+  $("aiResultTitle").textContent=aiResultTitle(r,score);
+  $("aiResultScore").innerHTML=`${score}<small>/100</small>`;
+  $("aiResultSummary").textContent=aiResultSummary(r,score);
+  $("aiResultFactors").innerHTML=aiCommentFactors(r,score)
+    .map(x=>`<div>${esc(x)}</div>`).join("");
+  $("aiResultActions").innerHTML=aiCommentActions(r,score)
+    .map(x=>`<div>${esc(x)}</div>`).join("");
+  $("aiResultRecheck").textContent=aiRecheckText(r,score);
+  $("aiResultManager").textContent=aiManagerText(r,score);
+
+  panel.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
 const $ = id => document.getElementById(id);
 const state = {
   stream:null, measuring:false, timer:null, samples:[], lastGray:null,
@@ -507,6 +629,8 @@ $("remeasure").addEventListener("click",()=>{ $("resultCard").classList.add("hid
 $("startMeasure").onclick=function(e){
   e.preventDefault();
   startMeasure();
+
+  renderAiResultComment(r);
 };
 $("startCamera").addEventListener("click",startCamera);
 $("stopCamera").addEventListener("click",stopCamera);
@@ -981,7 +1105,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.0プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v10.1プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))

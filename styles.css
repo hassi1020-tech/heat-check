@@ -339,3 +339,53 @@ body.monitor-mode .monitor-board strong{font-size:2.5rem}
   .v10-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .monitor-board{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+.ai-result-panel{
+  margin:18px 0;padding:18px;border-radius:16px;border:2px solid #cbd5e1;
+  background:#fff;box-shadow:0 12px 30px rgba(15,23,42,.08)
+}
+.ai-result-panel.result-hidden{opacity:.72}
+.ai-result-panel.level-green{border-color:#22c55e;background:#f0fdf4}
+.ai-result-panel.level-yellow{border-color:#eab308;background:#fefce8}
+.ai-result-panel.level-orange{border-color:#f97316;background:#fff7ed}
+.ai-result-panel.level-red{border-color:#dc2626;background:#fef2f2}
+.ai-result-header{display:flex;justify-content:space-between;gap:16px;align-items:center}
+.ai-result-kicker{
+  display:inline-block;font-size:.78rem;font-weight:900;letter-spacing:.08em;
+  color:#475569;text-transform:uppercase
+}
+.ai-result-header h2{margin:4px 0 0;font-size:1.65rem}
+.ai-result-score{
+  min-width:110px;text-align:center;padding:12px 14px;border-radius:14px;
+  background:#0f172a;color:#fff;font-size:2rem;font-weight:900
+}
+.ai-result-score small{font-size:.8rem;font-weight:700;opacity:.75}
+.ai-result-summary{
+  margin:14px 0;padding:15px 16px;border-radius:12px;background:rgba(255,255,255,.86);
+  font-size:1.05rem;line-height:1.75;font-weight:700
+}
+.ai-result-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ai-result-box{
+  padding:14px;border:1px solid rgba(100,116,139,.3);border-radius:12px;background:rgba(255,255,255,.82)
+}
+.ai-result-box h3{margin:0 0 9px;font-size:.95rem}
+.ai-result-list{display:grid;gap:7px;line-height:1.55}
+.ai-result-list>div{
+  position:relative;padding-left:18px
+}
+.ai-result-list>div::before{
+  content:"•";position:absolute;left:3px;font-weight:900
+}
+.ai-result-emphasis{font-size:1.05rem;font-weight:800;line-height:1.6}
+.ai-result-warning{
+  margin-top:12px;padding:10px 12px;border-radius:9px;background:#fff;
+  border:1px dashed #94a3b8;font-size:.8rem;color:#475569
+}
+.ai-result-panel.level-red .ai-result-warning,
+.ai-result-panel.level-orange .ai-result-warning{font-weight:800;color:#7f1d1d}
+@media(max-width:650px){
+  .ai-result-header{align-items:flex-start}
+  .ai-result-header h2{font-size:1.3rem}
+  .ai-result-score{min-width:88px;font-size:1.5rem}
+  .ai-result-grid{grid-template-columns:1fr}
+}
