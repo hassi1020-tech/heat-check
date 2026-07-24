@@ -16,7 +16,13 @@ function loadSettings(){
   return s;
 }
 function settings(){
-  return Object.fromEntries(Object.keys(defaults).map(k=>[k,Number($(k).value)]));
+  const out={};
+  Object.keys(defaults).forEach(k=>{
+    const el=$(k);
+    const n=el ? Number(el.value) : defaults[k];
+    out[k]=Number.isFinite(n) ? n : defaults[k];
+  });
+  return out;
 }
 function records(){ return JSON.parse(localStorage.getItem("heatRecords")||"[]"); }
 function saveRecords(v){ localStorage.setItem("heatRecords", JSON.stringify(v)); }
@@ -66,82 +72,117 @@ function validateFields(){
 }
 
 async function startMeasure(){
-  $("guide").textContent="測定開始処理を確認しています…";
-  if(!validateFields()){ alert("作業員ID・作業員名・現場名を入力してください。"); return; }
-  if(!state.stream) return;
+  const guide=$("guide");
+  try{
+    if(guide) guide.textContent="測定開始を受け付けました。";
 
-  const cfg=settings();
-  const warmup=cfg.warmupSec ?? 5;
-  const duration=cfg.durationSec;
-  state.measuring=true; state.samples=[]; state.lastGray=null; state.latestResult=null;
-  $("resultCard").classList.add("hidden");
-  $("startMeasure").disabled=true; $("stopCamera").disabled=true;
-  $("guide").textContent=`最初の${warmup}秒は準備中です。顔を動かさず、画面を見てください。`;
+    if(!validateFields()){
+      alert("作業員ID・作業員名・現場名を入力してください。");
+      return;
+    }
+    if(!state.stream){
+      if(guide) guide.textContent="カメラが開始されていません。";
+      return;
+    }
 
-  const start=performance.now();
-  const work=document.createElement("canvas");
-  work.width=200;work.height=150;
-  const ctx=work.getContext("2d",{willReadFrequently:true});
-  let lastSampleAt=0;
+    const video=$("video");
+    if(!video || video.readyState < 2){
+      if(guide) guide.textContent="映像準備中です。2秒後にもう一度押してください。";
+      return;
+    }
 
-  const loop=async()=>{
-    if(!state.measuring) return;
-    const elapsed=(performance.now()-start)/1000;
-    const measureElapsed=Math.max(0,elapsed-warmup);
-    $("countdown").textContent = elapsed < warmup
-      ? `準備 ${Math.ceil(warmup-elapsed)}`
-      : Math.max(0,duration-measureElapsed).toFixed(1);
+    const cfg=settings();
+    const warmup=Number(cfg.warmupSec)||5;
+    const duration=Number(cfg.durationSec)||25;
 
-    ctx.drawImage($("video"),0,0,work.width,work.height);
+    state.measuring=true;
+    state.samples=[];
+    state.lastGray=null;
+    state.latestResult=null;
 
-    let roi={x:64,y:22,w:72,h:46};
-    if(state.faceDetector && Math.floor(elapsed*4)!==Math.floor((elapsed-.08)*4)){
+    $("resultCard").classList.add("hidden");
+    $("startMeasure").disabled=true;
+    $("stopCamera").disabled=true;
+    $("countdown").textContent="準備 "+warmup;
+    guide.textContent="測定を開始しました。顔を動かさないでください。";
+
+    const started=performance.now();
+    const work=document.createElement("canvas");
+    work.width=160;
+    work.height=120;
+    const ctx=work.getContext("2d");
+    if(!ctx) throw new Error("画像解析を開始できません");
+
+    let lastSampleAt=0;
+
+    function loop(now){
       try{
-        const faces=await state.faceDetector.detect(work);
-        if(faces[0]){
-          const b=faces[0].boundingBox;
-          roi={x:b.x+b.width*.20,y:b.y+b.height*.10,w:b.width*.60,h:b.height*.30};
+        if(!state.measuring) return;
+
+        const elapsed=(now-started)/1000;
+        const measured=Math.max(0,elapsed-warmup);
+
+        $("countdown").textContent = elapsed < warmup
+          ? "準備 "+Math.max(0,Math.ceil(warmup-elapsed))
+          : Math.max(0,duration-measured).toFixed(1);
+
+        ctx.drawImage(video,0,0,160,120);
+
+        // 額付近の固定領域。スマホ互換性を優先
+        const img=ctx.getImageData(50,14,60,38).data;
+        let r=0,g=0,b=0,lum=0;
+        const gray=new Uint8Array(img.length/4);
+
+        for(let i=0,j=0;i<img.length;i+=4,j++){
+          r+=img[i]; g+=img[i+1]; b+=img[i+2];
+          const y=img[i]*0.299+img[i+1]*0.587+img[i+2]*0.114;
+          gray[j]=y;
+          lum+=y;
         }
-      }catch{}
-    }
-    roi.x=Math.max(0,Math.floor(roi.x)); roi.y=Math.max(0,Math.floor(roi.y));
-    roi.w=Math.min(work.width-roi.x,Math.max(12,Math.floor(roi.w)));
-    roi.h=Math.min(work.height-roi.y,Math.max(12,Math.floor(roi.h)));
 
-    const img=ctx.getImageData(roi.x,roi.y,roi.w,roi.h).data;
-    let r=0,g=0,b=0,lum=0; const gray=new Uint8Array(img.length/4);
-    for(let i=0,j=0;i<img.length;i+=4,j++){
-      r+=img[i];g+=img[i+1];b+=img[i+2];
-      const y=(img[i]*.299+img[i+1]*.587+img[i+2]*.114);
-      gray[j]=y; lum+=y;
-    }
-    const n=gray.length; r/=n;g/=n;b/=n;lum/=n;
-    let motion=0;
-    if(state.lastGray && state.lastGray.length===gray.length){
-      for(let i=0;i<n;i+=4) motion+=Math.abs(gray[i]-state.lastGray[i]);
-      motion/=(n/4);
-    }
-    state.lastGray=gray;
+        const n=gray.length;
+        r/=n; g/=n; b/=n; lum/=n;
 
-    // 約20fpsに間引き、準備時間中のデータは保存しない
-    if(elapsed>=warmup && performance.now()-lastSampleAt>=45){
-      state.samples.push({t:performance.now()/1000,g,r,b,lum,motion});
-      lastSampleAt=performance.now();
+        let motion=0;
+        if(state.lastGray && state.lastGray.length===gray.length){
+          for(let i=0;i<n;i+=4) motion+=Math.abs(gray[i]-state.lastGray[i]);
+          motion/=(n/4);
+        }
+        state.lastGray=gray;
+
+        if(elapsed>=warmup && now-lastSampleAt>=60){
+          state.samples.push({t:now/1000,g,r,b,lum,motion});
+          lastSampleAt=now;
+          $("quality").textContent="取得中 "+state.samples.length;
+        }
+
+        if(elapsed>=warmup && state.samples.length>120){
+          const quick=analyzeSignal(state.samples.slice(-160));
+          $("bpmLive").textContent=quick.bpm?Math.round(quick.bpm):"--";
+          $("quality").textContent=quick.qualityLabel;
+        }
+
+        if(measured>=duration){
+          finishMeasure();
+          return;
+        }
+
+        state.timer=requestAnimationFrame(loop);
+      }catch(err){
+        state.measuring=false;
+        $("startMeasure").disabled=false;
+        $("stopCamera").disabled=false;
+        guide.textContent="測定中エラー："+(err?.message||String(err));
+      }
     }
 
-    if(elapsed>=warmup && state.samples.length>120){
-      const quick=analyzeSignal(state.samples.slice(-160));
-      $("bpmLive").textContent=quick.bpm?Math.round(quick.bpm):"--";
-      $("quality").textContent=quick.qualityLabel;
-      $("guide").textContent = quick.qualityLabel==="良好"
-        ? "測定中です。そのまま動かないでください"
-        : "信号が不安定です。明るい場所でスマホを固定してください";
-    }
-
-    if(measureElapsed>=duration){ finishMeasure(); return; }
     state.timer=requestAnimationFrame(loop);
-  };
-  loop();
+  }catch(err){
+    state.measuring=false;
+    if($("startMeasure")) $("startMeasure").disabled=false;
+    if($("stopCamera")) $("stopCamera").disabled=false;
+    if(guide) guide.textContent="開始エラー："+(err?.message||String(err));
+  }
 }
 
 function movingAverage(arr,win){
@@ -276,7 +317,10 @@ $("saveResult").addEventListener("click",()=>{
   alert("結果を端末内に保存しました。顔画像・動画は保存していません。");
 });
 $("remeasure").addEventListener("click",()=>{ $("resultCard").classList.add("hidden"); startMeasure(); });
-$("startMeasure").addEventListener("click",startMeasure);
+$("startMeasure").onclick=function(e){
+  e.preventDefault();
+  startMeasure();
+};
 $("startCamera").addEventListener("click",startCamera);
 $("stopCamera").addEventListener("click",stopCamera);
 
@@ -316,5 +360,6 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
+$("guide").textContent="v5プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 window.addEventListener("beforeunload",()=>state.stream?.getTracks().forEach(t=>t.stop()));
