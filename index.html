@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f172a">
   <title>現場 顔動画コンディションチェック</title>
-  <link rel="manifest" href="manifest.webmanifest?v=93">
-  <link rel="stylesheet" href="styles.css?v=93">
+  <link rel="manifest" href="manifest.webmanifest?v=94">
+  <link rel="stylesheet" href="styles.css?v=94">
 </head>
 <body>
 <header>
@@ -25,13 +25,19 @@
 <section id="check" class="view active">
   <div class="card form-grid">
     <label>作業員ID
-      <input id="workerId" autocomplete="off" placeholder="例：A001">
+      <input id="workerId" list="workerIdList" autocomplete="off" placeholder="例：A001">
+      <datalist id="workerIdList"></datalist>
     </label>
     <label>作業員名
       <input id="workerName" autocomplete="off" placeholder="例：山田 太郎">
     </label>
     <label>現場名
-      <input id="siteName" autocomplete="off" placeholder="例：○○ポンプ所">
+      <input id="siteName" list="siteNameList" autocomplete="off" placeholder="例：○○ポンプ所">
+      <datalist id="siteNameList"></datalist>
+    </label>
+    <label>作業班
+      <input id="teamName" list="teamNameList" autocomplete="off" placeholder="例：機械班">
+      <datalist id="teamNameList"></datalist>
     </label>
     <label>測定区分
       <select id="timing">
@@ -160,7 +166,77 @@
     </div>
 
     
-    <div class="admin-panel">
+    
+    <div class="master-panel">
+      <div class="toolbar master-toolbar">
+        <div>
+          <h3>現場運用マスタ</h3>
+          <p>現場・作業班・作業員を登録すると、測定入力と測定漏れ確認へ自動反映します。</p>
+        </div>
+        <div class="master-actions">
+          <button id="exportMasterJson" type="button">設定を書き出す</button>
+          <label class="file-button">設定を読み込む
+            <input id="importMasterJson" type="file" accept=".json,application/json">
+          </label>
+        </div>
+      </div>
+
+      <div class="master-grid">
+        <section class="master-section">
+          <h4>現場マスタ</h4>
+          <div class="inline-entry">
+            <input id="masterSiteName" placeholder="現場名">
+            <button id="addSiteMaster" type="button">追加</button>
+          </div>
+          <div id="siteMasterList" class="master-list"></div>
+        </section>
+
+        <section class="master-section">
+          <h4>作業班マスタ</h4>
+          <div class="inline-entry">
+            <input id="masterTeamName" placeholder="作業班名">
+            <button id="addTeamMaster" type="button">追加</button>
+          </div>
+          <div id="teamMasterList" class="master-list"></div>
+        </section>
+
+        <section class="master-section worker-master-section">
+          <h4>作業員マスタ</h4>
+          <div class="worker-master-entry">
+            <input id="masterWorkerId" placeholder="作業員ID">
+            <input id="masterWorkerName" placeholder="氏名">
+            <select id="masterWorkerSite"><option value="">所属現場</option></select>
+            <select id="masterWorkerTeam"><option value="">作業班</option></select>
+            <button id="addWorkerMaster" type="button">登録</button>
+          </div>
+          <div id="workerMasterList" class="master-list worker-master-list"></div>
+        </section>
+      </div>
+
+      <div class="sync-card">
+        <div>
+          <strong>データ同期準備</strong>
+          <span>現在は端末内保存です。JSON書出し・読込みで別端末へ移行できます。</span>
+        </div>
+        <button id="exportAllData" type="button">全データバックアップ</button>
+        <label class="file-button">全データ復元
+          <input id="importAllData" type="file" accept=".json,application/json">
+        </label>
+      </div>
+    </div>
+
+    <div class="notification-panel">
+      <div class="notification-head">
+        <div>
+          <h3>管理者通知センター</h3>
+          <p>橙・赤、または黄判定が連続した作業員を自動抽出します。</p>
+        </div>
+        <button id="clearNotifications" type="button">確認済みにする</button>
+      </div>
+      <div id="notificationList" class="notification-list">通知はありません。</div>
+    </div>
+
+<div class="admin-panel">
       <div class="toolbar admin-toolbar">
         <div>
           <h3>管理者ダッシュボード</h3>
@@ -173,6 +249,11 @@
           <label>現場
             <select id="adminSite">
               <option value="">すべての現場</option>
+            </select>
+          </label>
+          <label>作業班
+            <select id="adminTeam">
+              <option value="">すべての班</option>
             </select>
           </label>
           <label>判定
@@ -309,8 +390,8 @@
 </section>
 </main>
 
-<footer>Prototype v9.3（顔ランドマーク追従版）</footer>
-<script type="module" src="face-landmarker.js?v=93"></script>
-<script src="app.js?v=93"></script>
+<footer>Prototype v9.4（現場・作業員マスタ運用版）</footer>
+<script type="module" src="face-landmarker.js?v=94"></script>
+<script src="app.js?v=94"></script>
 </body>
 </html>

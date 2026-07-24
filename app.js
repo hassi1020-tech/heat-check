@@ -404,7 +404,7 @@ function finishMeasure(){
   const result=judge(face,context,baseline);
   state.latestResult={...result,...face,context,baseline,
     workerId:$("workerId").value.trim(),workerName:$("workerName").value.trim(),
-    siteName:$("siteName").value.trim(),timing:$("timing").value,
+    siteName:$("siteName").value.trim(),teamName:$("teamName")?.value.trim()||"",timing:$("timing").value,
     timestamp:new Date().toISOString()};
   showResult(state.latestResult);
 }
@@ -492,6 +492,7 @@ $("saveResult").addEventListener("click",()=>{
   updateSummary();
   populateWorkerSelect();
   renderAdminDashboard();
+  renderNotifications();
 });
 $("remeasure").addEventListener("click",()=>{ $("resultCard").classList.add("hidden"); startMeasure(); });
 $("startMeasure").onclick=function(e){
@@ -715,11 +716,13 @@ function filteredAdminRecords(){
   const date=selectedAdminDate();
   const site=$("adminSite")?.value||"";
   const level=$("adminLevel")?.value||"";
+  const team=$("adminTeam")?.value||"";
   return records().filter(r=>{
     const dateOk=(r.timestamp||"").slice(0,10)===date;
     const siteOk=!site||r.siteName===site;
     const levelOk=!level||r.level===level;
-    return dateOk&&siteOk&&levelOk;
+    const teamOk=!team||r.teamName===team;
+    return dateOk&&siteOk&&teamOk&&levelOk;
   });
 }
 
@@ -727,7 +730,7 @@ function populateAdminSites(){
   const select=$("adminSite");
   if(!select)return;
   const current=select.value;
-  const sites=[...new Set(records().map(r=>r.siteName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  const sites=uniqueText([...loadMaster().sites,...records().map(r=>r.siteName).filter(Boolean)]).sort((a,b)=>a.localeCompare(b,"ja"));
   select.innerHTML='<option value="">すべての現場</option>'+
     sites.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
   if(sites.includes(current))select.value=current;
@@ -772,6 +775,10 @@ function renderDailySummary(){
   const avgWbgt=list.filter(r=>Number.isFinite(Number(r.context?.wbgt)))
     .map(r=>Number(r.context.wbgt));
   const avgWbgtText=avgWbgt.length?(avg(avgWbgt)).toFixed(1):"--";
+  const expected=expectedWorkersForFilter();
+  const measuredIds=new Set(list.map(r=>r.workerId));
+  const measuredExpected=expected.filter(w=>measuredIds.has(w.id)).length;
+  const rate=expected.length?Math.round(measuredExpected/expected.length*100):null;
 
   box.innerHTML=`
     <div class="daily-summary-grid">
@@ -783,7 +790,10 @@ function renderDailySummary(){
       <div><span>黄</span><strong>${levels.yellow}</strong></div>
       <div><span>橙</span><strong>${levels.orange}</strong></div>
       <div><span>赤</span><strong>${levels.red}</strong></div>
-    </div>`;
+      <div><span>対象作業員</span><strong>${expected.length||"--"}</strong></div>
+      <div><span>測定率</span><strong>${rate===null?"--":rate+"%"}</strong></div>
+    </div>
+    ${rate===null?"":`<div class="measure-rate"><div style="width:${rate}%"></div></div>`}`;
 }
 
 function checkMissingWorkers(){
@@ -823,13 +833,13 @@ function exportDailyCsv(){
   }
 
   const headers=[
-    "日時","現場","作業員ID","作業員名","区分","判定",
+    "日時","現場","作業班","作業員ID","作業員名","区分","判定",
     "顔色変化","赤み変化","顔の動き","映像品質","左右差",
     "WBGT","作業強度","水分補給","本人申告","管理指示"
   ];
   const rows=[headers,...list.map(r=>[
     new Date(r.timestamp).toLocaleString("ja-JP"),
-    r.siteName,r.workerId,r.workerName,r.timing,r.label,
+    r.siteName,r.teamName||"",r.workerId,r.workerName,r.timing,r.label,
     r.colorChange?.toFixed?.(2)??r.colorChange??"",
     r.rednessChange?.toFixed?.(2)??r.rednessChange??"",
     r.motionLabel||"",
@@ -862,13 +872,52 @@ function renderDashboard(){
   ].map(x=>`<span>${x}</span>`).join("");
   $("recordsBody").innerHTML=rs.map(r=>`<tr>
     <td>${new Date(r.timestamp).toLocaleString("ja-JP")}</td>
-    <td>${esc(r.siteName)}</td><td>${esc(r.workerName)}（${esc(r.workerId)}）</td>
+    <td>${esc(r.siteName)}<br><small>${esc(r.teamName||"")}</small></td><td>${esc(r.workerName)}（${esc(r.workerId)}）</td>
     <td>${esc(r.timing)}</td><td class="level-cell">${esc(r.label)}</td>
     <td>${esc(r.colorChangeLabel||"--")}</td><td>${esc(r.qualityLabel)}</td>
     <td>${esc(r.instruction)}</td></tr>`).join("");
   renderWorkerCard();
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+
+
+if($("addSiteMaster"))$("addSiteMaster").addEventListener("click",addSiteMaster);
+if($("addTeamMaster"))$("addTeamMaster").addEventListener("click",addTeamMaster);
+if($("addWorkerMaster"))$("addWorkerMaster").addEventListener("click",addWorkerMaster);
+if($("workerId"))$("workerId").addEventListener("change",fillWorkerFromMaster);
+if($("clearNotifications"))$("clearNotifications").addEventListener("click",clearNotifications);
+if($("adminTeam"))$("adminTeam").addEventListener("change",renderAdminDashboard);
+if($("exportMasterJson"))$("exportMasterJson").addEventListener("click",()=>{
+  downloadJson(`heat-check-master_${new Date().toISOString().slice(0,10)}.json`,loadMaster());
+});
+if($("importMasterJson"))$("importMasterJson").addEventListener("change",async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  try{
+    const data=await readJsonFile(file);
+    if(!Array.isArray(data.sites)||!Array.isArray(data.teams)||!Array.isArray(data.workers))throw new Error();
+    localStorage.setItem(MASTER_KEY,JSON.stringify(data));renderMaster();alert("マスタを読み込みました。");
+  }catch{alert("マスタファイルを読み込めませんでした。");}
+  e.target.value="";
+});
+if($("exportAllData"))$("exportAllData").addEventListener("click",()=>{
+  downloadJson(`heat-check-backup_${new Date().toISOString().slice(0,10)}.json`,{
+    schemaVersion:"9.4",exportedAt:new Date().toISOString(),master:loadMaster(),records:records(),
+    settings:JSON.parse(localStorage.getItem("heatSettings")||"{}")
+  });
+});
+if($("importAllData"))$("importAllData").addEventListener("change",async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  try{
+    const data=await readJsonFile(file);
+    if(!Array.isArray(data.records)||!data.master)throw new Error();
+    saveRecords(data.records);localStorage.setItem(MASTER_KEY,JSON.stringify(data.master));
+    if(data.settings)localStorage.setItem("heatSettings",JSON.stringify(data.settings));
+    renderMaster();renderDashboard();alert("全データを復元しました。");
+  }catch{alert("バックアップファイルを復元できませんでした。");}
+  e.target.value="";
+});
+renderMaster();
+renderNotifications();
 
 if($("adminDate")){
   $("adminDate").value=new Date().toISOString().slice(0,10);
@@ -888,7 +937,7 @@ window.addEventListener("resize",()=>{
 
 $("exportCsv").addEventListener("click",()=>{
   const rs=records();
-  const headers=["日時","現場","作業員ID","作業員名","区分","判定","顔色変化","赤み変化","明るさ変化","顔の動き","映像品質","左右差","WBGT","作業強度","水分補給","本人申告","指示"];
+  const headers=["日時","現場","作業班","作業員ID","作業員名","区分","判定","顔色変化","赤み変化","明るさ変化","顔の動き","映像品質","左右差","WBGT","作業強度","水分補給","本人申告","指示"];
   const rows=rs.map(r=>[
     new Date(r.timestamp).toLocaleString("ja-JP"),r.siteName,r.workerId,r.workerName,r.timing,
     r.label,r.colorChangeLabel||"",r.rednessChange?.toFixed(2)??"",r.brightnessChange?.toFixed(2)??"",r.motionLabel||"",r.qualityLabel,r.asymmetryLabel||"",r.context?.wbgt??"",r.context?.workload??"",r.context?.hydration??"",r.context?.selfCondition??"",r.instruction
@@ -907,7 +956,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v9.3プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v9.4プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -917,3 +966,166 @@ if("caches" in window){
   caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).catch(()=>{});
 }
 window.addEventListener("beforeunload",()=>state.stream?.getTracks().forEach(t=>t.stop()));
+const MASTER_KEY="heatCheckMasterV94";
+const NOTICE_KEY="heatCheckNoticeAckV94";
+
+function defaultMaster(){
+  return {version:"9.4",sites:[],teams:[],workers:[],updatedAt:new Date().toISOString()};
+}
+function loadMaster(){
+  try{
+    return {...defaultMaster(),...JSON.parse(localStorage.getItem(MASTER_KEY)||"{}")};
+  }catch{return defaultMaster();}
+}
+function saveMaster(master){
+  master.updatedAt=new Date().toISOString();
+  localStorage.setItem(MASTER_KEY,JSON.stringify(master));
+  renderMaster();
+}
+function uniqueText(list){return [...new Set(list.map(v=>String(v||"").trim()).filter(Boolean))];}
+function downloadJson(filename,data){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();
+  URL.revokeObjectURL(a.href);
+}
+function readJsonFile(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{try{resolve(JSON.parse(reader.result));}catch(e){reject(e);}};
+    reader.onerror=reject;reader.readAsText(file);
+  });
+}
+function renderMaster(){
+  const m=loadMaster();
+  const siteList=$("siteMasterList"),teamList=$("teamMasterList"),workerList=$("workerMasterList");
+  if(!siteList)return;
+
+  siteList.innerHTML=m.sites.length?m.sites.map((s,i)=>`
+    <span class="master-chip">${esc(s)}<button type="button" data-master-remove="site" data-index="${i}">×</button></span>`).join("")
+    :"未登録";
+  teamList.innerHTML=m.teams.length?m.teams.map((s,i)=>`
+    <span class="master-chip">${esc(s)}<button type="button" data-master-remove="team" data-index="${i}">×</button></span>`).join("")
+    :"未登録";
+  workerList.innerHTML=m.workers.length?m.workers.map((w,i)=>`
+    <div class="worker-master-row">
+      <strong>${esc(w.id)}</strong><span>${esc(w.name)}</span>
+      <span>${esc(w.site||"所属未設定")}</span><span>${esc(w.team||"班未設定")}</span>
+      <button type="button" data-master-remove="worker" data-index="${i}">削除</button>
+    </div>`).join("")
+    :"作業員は未登録です。";
+
+  const siteOptions='<option value="">所属現場</option>'+m.sites.map(s=>`<option>${esc(s)}</option>`).join("");
+  const teamOptions='<option value="">作業班</option>'+m.teams.map(s=>`<option>${esc(s)}</option>`).join("");
+  if($("masterWorkerSite"))$("masterWorkerSite").innerHTML=siteOptions;
+  if($("masterWorkerTeam"))$("masterWorkerTeam").innerHTML=teamOptions;
+
+  if($("workerIdList"))$("workerIdList").innerHTML=m.workers.map(w=>`<option value="${esc(w.id)}">${esc(w.name)}</option>`).join("");
+  if($("siteNameList"))$("siteNameList").innerHTML=m.sites.map(s=>`<option value="${esc(s)}"></option>`).join("");
+  if($("teamNameList"))$("teamNameList").innerHTML=m.teams.map(s=>`<option value="${esc(s)}"></option>`).join("");
+
+  document.querySelectorAll("[data-master-remove]").forEach(btn=>{
+    btn.onclick=()=>{
+      const master=loadMaster(),type=btn.dataset.masterRemove,index=Number(btn.dataset.index);
+      if(type==="site")master.sites.splice(index,1);
+      if(type==="team")master.teams.splice(index,1);
+      if(type==="worker")master.workers.splice(index,1);
+      saveMaster(master);
+    };
+  });
+  populateAdminSites();
+  populateAdminTeams();
+  populateWorkerSelect();
+  renderAdminDashboard();
+  renderNotifications();
+}
+
+function fillWorkerFromMaster(){
+  const id=$("workerId")?.value.trim();
+  if(!id)return;
+  const w=loadMaster().workers.find(x=>x.id===id);
+  if(!w)return;
+  $("workerName").value=w.name||"";
+  if(w.site)$("siteName").value=w.site;
+  if($("teamName")&&w.team)$("teamName").value=w.team;
+}
+
+function addSiteMaster(){
+  const value=$("masterSiteName").value.trim();if(!value)return;
+  const m=loadMaster();m.sites=uniqueText([...m.sites,value]);saveMaster(m);
+  $("masterSiteName").value="";
+}
+function addTeamMaster(){
+  const value=$("masterTeamName").value.trim();if(!value)return;
+  const m=loadMaster();m.teams=uniqueText([...m.teams,value]);saveMaster(m);
+  $("masterTeamName").value="";
+}
+function addWorkerMaster(){
+  const id=$("masterWorkerId").value.trim(),name=$("masterWorkerName").value.trim();
+  if(!id||!name){alert("作業員IDと氏名を入力してください。");return;}
+  const m=loadMaster();
+  const item={id,name,site:$("masterWorkerSite").value,team:$("masterWorkerTeam").value,active:true};
+  const index=m.workers.findIndex(w=>w.id===id);
+  if(index>=0)m.workers[index]=item;else m.workers.push(item);
+  m.workers.sort((a,b)=>a.id.localeCompare(b.id,"ja"));
+  saveMaster(m);
+  ["masterWorkerId","masterWorkerName"].forEach(x=>$(x).value="");
+}
+
+function populateAdminTeams(){
+  const select=$("adminTeam");if(!select)return;
+  const current=select.value;
+  const masterTeams=loadMaster().teams;
+  const recordTeams=records().map(r=>r.teamName).filter(Boolean);
+  const teams=uniqueText([...masterTeams,...recordTeams]).sort((a,b)=>a.localeCompare(b,"ja"));
+  select.innerHTML='<option value="">すべての班</option>'+teams.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+  if(teams.includes(current))select.value=current;
+}
+
+function expectedWorkersForFilter(){
+  const m=loadMaster();
+  const site=$("adminSite")?.value||"";
+  const team=$("adminTeam")?.value||"";
+  return m.workers.filter(w=>w.active!==false&&(!site||w.site===site)&&(!team||w.team===team));
+}
+
+function generateNotifications(){
+  const all=records().sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
+  const grouped=new Map();
+  all.forEach(r=>{
+    if(!grouped.has(r.workerId))grouped.set(r.workerId,[]);
+    grouped.get(r.workerId).push(r);
+  });
+  const notices=[];
+  grouped.forEach((list,id)=>{
+    const latest=list.at(-1);if(!latest)return;
+    const consecutive=consecutiveCaution(list);
+    if(latest.level==="red"||latest.level==="orange"||(latest.level==="yellow"&&consecutive>=2)){
+      notices.push({
+        id:`${id}_${latest.timestamp}`,
+        workerId:id,workerName:latest.workerName,siteName:latest.siteName,
+        teamName:latest.teamName||"",level:latest.level,label:latest.label,
+        timestamp:latest.timestamp,consecutive,instruction:latest.instruction
+      });
+    }
+  });
+  return notices.sort((a,b)=>levelRank(b.level)-levelRank(a.level)||Date.parse(b.timestamp)-Date.parse(a.timestamp));
+}
+function renderNotifications(){
+  const box=$("notificationList");if(!box)return;
+  const ack=JSON.parse(localStorage.getItem(NOTICE_KEY)||"[]");
+  const notices=generateNotifications().filter(n=>!ack.includes(n.id));
+  if(!notices.length){box.textContent="通知はありません。";return;}
+  box.innerHTML=notices.map(n=>`
+    <div class="notification-item ${n.level}">
+      <strong>${esc(n.workerName||n.workerId)}（${esc(n.workerId)}）— ${esc(n.label)}</strong>
+      <span>${esc(n.siteName||"現場未設定")}／${esc(n.teamName||"班未設定")}／${new Date(n.timestamp).toLocaleString("ja-JP")}</span>
+      <div>${n.consecutive>=2?`注意判定 ${n.consecutive}回連続。`:""}${esc(n.instruction||"管理者が対面確認してください。")}</div>
+    </div>`).join("");
+}
+function clearNotifications(){
+  const ack=JSON.parse(localStorage.getItem(NOTICE_KEY)||"[]");
+  const ids=generateNotifications().map(n=>n.id);
+  localStorage.setItem(NOTICE_KEY,JSON.stringify([...new Set([...ack,...ids])]));
+  renderNotifications();
+}
+
