@@ -117,3 +117,10 @@ GitHubへ更新する場合は、README.md、index.html、app.jsを含む全フ�
 - 測定処理をスマホ互換版へ完全差し替え
 - 起動時に「v5プログラム読込済み」と表示
 - Service Workerをnetwork-firstへ変更
+
+
+## v6 キャッシュ完全回避
+- index.htmlからapp.js?v=6、styles.css?v=6として読み込み
+- 旧Service Workerを自動解除
+- 旧キャッシュを自動削除
+- GitHub PagesでHTMLだけ新しく、JavaScriptだけ古い状態になる問題を回避

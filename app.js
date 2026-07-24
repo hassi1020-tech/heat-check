@@ -360,6 +360,13 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v5プログラム読込済み。カメラを開始してください。";
-if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+$("guide").textContent="v6プログラム読込済み。カメラを開始してください。";
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.getRegistrations()
+    .then(regs=>Promise.all(regs.map(r=>r.unregister())))
+    .catch(()=>{});
+}
+if("caches" in window){
+  caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).catch(()=>{});
+}
 window.addEventListener("beforeunload",()=>state.stream?.getTracks().forEach(t=>t.stop()));
