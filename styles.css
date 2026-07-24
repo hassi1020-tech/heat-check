@@ -64,3 +64,19 @@ hr{border:0;border-top:1px solid var(--line);margin:22px 0}
 .symptoms label{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:9px;background:#f8fafc;color:var(--text)}
 .symptoms input{width:auto;margin:0}
 @media(max-width:700px){.symptoms{grid-template-columns:1fr}}
+
+.measure-status-grid,.summary-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px
+}
+.measure-status-grid>div,.summary-card{
+  border:1px solid var(--line);border-radius:10px;background:#f8fafc;padding:10px;text-align:center
+}
+.measure-status-grid span,.summary-card span{display:block;font-size:.78rem;color:var(--muted)}
+.measure-status-grid strong,.summary-card strong{display:block;margin-top:4px;font-size:1rem}
+.summary-grid{grid-template-columns:repeat(5,minmax(0,1fr));}
+.summary-card.green{background:#ecfdf5}.summary-card.yellow{background:#fffbeb}
+.summary-card.orange{background:#fff7ed}.summary-card.red{background:#fef2f2}
+@media(max-width:700px){
+  .measure-status-grid{grid-template-columns:1fr}
+  .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

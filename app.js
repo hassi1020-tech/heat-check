@@ -148,6 +148,8 @@ async function startMeasure(){
             $("quality").textContent=q.qualityLabel;
             $("stability").textContent=q.motionLabel;
             $("bpmLive").textContent=q.colorChangeLabel;
+            if($("facePosition"))$("facePosition").textContent=q.positionLabel;
+            if($("lightingStatus"))$("lightingStatus").textContent=q.lightingLabel;
           }else $("quality").textContent="取得中 "+state.samples.length;
         }
 
@@ -182,11 +184,42 @@ function std(arr){
 function avg(arr){ return arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0; }
 function pctChange(a,b){ return a===0?0:((b-a)/Math.abs(a))*100; }
 
+
+function workerFaceBaseline(workerId){
+  const list=records()
+    .filter(r=>r.workerId===workerId && r.quality>=70 && r.level==="green")
+    .slice(-10);
+  if(list.length<3) return null;
+  return {
+    colorChange:avg(list.map(r=>Number(r.colorChange)||0)),
+    rednessChange:avg(list.map(r=>Number(r.rednessChange)||0)),
+    brightnessChange:avg(list.map(r=>Number(r.brightnessChange)||0)),
+    asymmetry:avg(list.map(r=>Number(r.asymmetry)||0)),
+    avgMotion:avg(list.map(r=>Number(r.avgMotion)||0))
+  };
+}
+
+function todayRecords(){
+  const today=new Date().toISOString().slice(0,10);
+  return records().filter(r=>(r.timestamp||"").slice(0,10)===today);
+}
+
+function updateSummary(){
+  const list=todayRecords();
+  const c={green:0,yellow:0,orange:0,red:0};
+  list.forEach(r=>{ if(c[r.level]!==undefined)c[r.level]++; });
+  if($("sumTotal"))$("sumTotal").textContent=list.length;
+  if($("sumGreen"))$("sumGreen").textContent=c.green;
+  if($("sumYellow"))$("sumYellow").textContent=c.yellow;
+  if($("sumOrange"))$("sumOrange").textContent=c.orange;
+  if($("sumRed"))$("sumRed").textContent=c.red;
+}
 function analyzeFace(samples){
   if(samples.length<50){
     return {quality:0,qualityLabel:"不足",avgMotion:99,motionLabel:"不足",
       colorChange:0,colorChangeLabel:"不足",rednessChange:0,brightnessChange:0,
-      asymmetry:0,asymmetryLabel:"不足",paleScore:0,redScore:0};
+      asymmetry:0,asymmetryLabel:"不足",paleScore:0,redScore:0,
+      lightingBias:99,lightingLabel:"不足",positionScore:0,positionLabel:"不足"};
   }
 
   const split=Math.max(10,Math.floor(samples.length*.30));
@@ -206,31 +239,46 @@ function analyzeFace(samples){
 
   const leftLum=regionMean(samples,1,"lum"), rightLum=regionMean(samples,2,"lum");
   const leftRed=regionMean(samples,1,"redness"), rightRed=regionMean(samples,2,"redness");
-  const asymmetry=Math.abs(leftLum-rightLum)/Math.max(1,(leftLum+rightLum)/2)*100
-    +Math.abs(leftRed-rightRed)/Math.max(.01,(leftRed+rightRed)/2)*100;
+  const lightingBias=Math.abs(leftLum-rightLum)/Math.max(1,(leftLum+rightLum)/2)*100;
+
+  // 左右照明差がある場合、色の左右差を明るさ比で補正
+  const leftNorm=leftRed/Math.max(.2,leftLum/Math.max(1,(leftLum+rightLum)/2));
+  const rightNorm=rightRed/Math.max(.2,rightLum/Math.max(1,(leftLum+rightLum)/2));
+  const asymmetry=Math.abs(leftNorm-rightNorm)/Math.max(.01,(leftNorm+rightNorm)/2)*100;
 
   const avgMotion=avg(samples.map(s=>s.motion));
   const lumValues=samples.flatMap(s=>s.regions.map(r=>r.lum));
   const minLum=Math.min(...lumValues), maxLum=Math.max(...lumValues), avgLum=avg(lumValues);
 
+  // 固定ROIの3領域に十分な明るさがあるかを顔位置の簡易指標に使用
+  const foreheadLum=regionMean(samples,0,"lum");
+  const cheekLum=avg([leftLum,rightLum]);
+  const positionScore=Math.max(0,100-Math.abs(foreheadLum-cheekLum)*1.2-Math.min(50,avgMotion*3));
+
   let quality=100;
   if(avgLum<45||avgLum>220)quality-=40;
-  if(maxLum-minLum>90)quality-=20;
-  quality-=Math.min(45,avgMotion*3.5);
-  if(asymmetry>35)quality-=15;
+  if(maxLum-minLum>90)quality-=15;
+  if(lightingBias>35)quality-=25;
+  else if(lightingBias>22)quality-=12;
+  quality-=Math.min(40,avgMotion*3.2);
+  if(positionScore<45)quality-=20;
   quality=Math.max(0,Math.min(100,quality));
 
   const colorMagnitude=Math.abs(brightnessChange)+Math.abs(rednessChange)+Math.abs(blueChange);
   const colorChangeLabel=colorMagnitude<4?"小":colorMagnitude<9?"中":"大";
   const motionLabel=avgMotion<4?"小":avgMotion<8?"中":"大";
   const asymmetryLabel=asymmetry<12?"小":asymmetry<25?"中":"大";
+  const lightingLabel=lightingBias<15?"良好":lightingBias<30?"注意":"不良";
+  const positionLabel=positionScore>=70?"良好":positionScore>=45?"注意":"不良";
   const qualityLabel=quality>=75?"良好":quality>=55?"注意":"不足";
+
   const paleScore=Math.max(0,-brightnessChange)+Math.max(0,blueChange);
   const redScore=Math.max(0,rednessChange)+Math.max(0,brightnessChange*.25);
 
   return {quality,qualityLabel,avgMotion,motionLabel,colorChange:colorMagnitude,
     colorChangeLabel,rednessChange,brightnessChange,blueChange,asymmetry,
-    asymmetryLabel,paleScore,redScore,avgLum};
+    asymmetryLabel,paleScore,redScore,avgLum,lightingBias,lightingLabel,
+    positionScore,positionLabel};
 }
 
 function workerBaseline(workerId){
@@ -256,15 +304,16 @@ function finishMeasure(){
       cramp:$("symCramp").checked,confusion:$("symConfusion").checked
     }
   };
-  const result=judge(face,context);
-  state.latestResult={...result,...face,context,
+  const baseline=workerFaceBaseline($("workerId").value.trim());
+  const result=judge(face,context,baseline);
+  state.latestResult={...result,...face,context,baseline,
     workerId:$("workerId").value.trim(),workerName:$("workerName").value.trim(),
     siteName:$("siteName").value.trim(),timing:$("timing").value,
     timestamp:new Date().toISOString()};
   showResult(state.latestResult);
 }
 
-function judge(face,context){
+function judge(face,context,baseline){
   const s=settings(), symptoms=context.symptoms;
   const serious=symptoms.confusion||symptoms.cramp||context.selfCondition==="bad";
   const symptomCount=Object.values(symptoms).filter(Boolean).length;
@@ -282,17 +331,26 @@ function judge(face,context){
   if(context.selfCondition==="slight")contextScore+=2;
   contextScore+=symptomCount*2;
 
+  let baselineScore=0;
+  if(baseline){
+    if(Math.abs(face.colorChange-baseline.colorChange)>=6)baselineScore+=2;
+    else if(Math.abs(face.colorChange-baseline.colorChange)>=3)baselineScore+=1;
+    if(Math.abs(face.rednessChange-baseline.rednessChange)>=5)baselineScore+=2;
+    else if(Math.abs(face.rednessChange-baseline.rednessChange)>=2.5)baselineScore+=1;
+    if(face.avgMotion-baseline.avgMotion>=4)baselineScore+=1;
+  }
+
   let faceScore=0;
   if(face.colorChange>=9)faceScore+=2; else if(face.colorChange>=4)faceScore+=1;
   if(face.redScore>=6||face.paleScore>=6)faceScore+=2; else if(face.redScore>=3||face.paleScore>=3)faceScore+=1;
   if(face.avgMotion>=8)faceScore+=2; else if(face.avgMotion>=4)faceScore+=1;
   if(face.asymmetry>=25)faceScore+=1;
 
-  if(contextScore>=6||(contextScore>=4&&faceScore>=2))
+  if(contextScore>=6||(contextScore>=4&&faceScore>=2)||(baselineScore>=4&&contextScore>=2))
     return {level:"orange",label:"橙：休憩・管理者確認",
       instruction:`作業を中断し、涼しい場所で休憩してください。水分・塩分補給後、${s.retryMin}分後に再測定し、管理者が本人の状態を直接確認してください。`};
 
-  if(contextScore>=3||faceScore>=3||(contextScore>=2&&faceScore>=1))
+  if(contextScore>=3||faceScore>=3||baselineScore>=3||(contextScore>=2&&faceScore>=1))
     return {level:"yellow",label:"黄：水分補給・再測定",
       instruction:`顔状態または現場条件に変化要因があります。水分・塩分を補給し、${s.retryMin}分以内に再測定してください。違和感がある場合は作業を中止してください。`};
 
@@ -317,6 +375,14 @@ function showResult(r){
   const wbgtText=r.context?.wbgt!==null&&r.context?.wbgt!==undefined?`WBGT ${r.context.wbgt}`:"WBGT未入力";
   const symptomN=r.context?.symptoms?Object.values(r.context.symptoms).filter(Boolean).length:0;
   $("resultContext").textContent=`${wbgtText}・症状${symptomN}件`;
+  if($("facePosition"))$("facePosition").textContent=r.positionLabel;
+  if($("lightingStatus"))$("lightingStatus").textContent=r.lightingLabel;
+  if($("baselineStatus")){
+    if(r.baseline){
+      const d=Math.abs(r.colorChange-r.baseline.colorChange);
+      $("baselineStatus").textContent=d<3?"通常範囲":d<6?"やや変化":"大きな変化";
+    }else $("baselineStatus").textContent="未登録";
+  }
   $("instruction").textContent=r.instruction;
 }
 
@@ -369,7 +435,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v8プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v9.0プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
