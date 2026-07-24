@@ -493,6 +493,8 @@ $("saveResult").addEventListener("click",()=>{
   populateWorkerSelect();
   renderAdminDashboard();
   renderNotifications();
+  renderAnalysis();
+  renderValidation();
 });
 $("remeasure").addEventListener("click",()=>{ $("resultCard").classList.add("hidden"); startMeasure(); });
 $("startMeasure").onclick=function(e){
@@ -863,6 +865,8 @@ function exportDailyCsv(){
 }
 function renderDashboard(){
   updateSummary();
+  renderAnalysis();
+  renderValidation();
   renderAdminDashboard();
   populateWorkerSelect();
   const rs=records().sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp));
@@ -881,12 +885,20 @@ function renderDashboard(){
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
 
 
+
+if($("copyDailyReport"))$("copyDailyReport").addEventListener("click",()=>copyTextArea("dailyReportText"));
+if($("copyMonthlyReport"))$("copyMonthlyReport").addEventListener("click",()=>copyTextArea("monthlyReportText"));
+if($("validationWorker"))$("validationWorker").addEventListener("change",populateValidationRecords);
+if($("saveValidation"))$("saveValidation").addEventListener("click",saveValidationEntry);
+renderAnalysis();
+renderValidation();
+
 if($("addSiteMaster"))$("addSiteMaster").addEventListener("click",addSiteMaster);
 if($("addTeamMaster"))$("addTeamMaster").addEventListener("click",addTeamMaster);
 if($("addWorkerMaster"))$("addWorkerMaster").addEventListener("click",addWorkerMaster);
 if($("workerId"))$("workerId").addEventListener("change",fillWorkerFromMaster);
 if($("clearNotifications"))$("clearNotifications").addEventListener("click",clearNotifications);
-if($("adminTeam"))$("adminTeam").addEventListener("change",renderAdminDashboard);
+if($("adminTeam"))$("adminTeam").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();});
 if($("exportMasterJson"))$("exportMasterJson").addEventListener("click",()=>{
   downloadJson(`heat-check-master_${new Date().toISOString().slice(0,10)}.json`,loadMaster());
 });
@@ -902,7 +914,7 @@ if($("importMasterJson"))$("importMasterJson").addEventListener("change",async e
 if($("exportAllData"))$("exportAllData").addEventListener("click",()=>{
   downloadJson(`heat-check-backup_${new Date().toISOString().slice(0,10)}.json`,{
     schemaVersion:"9.4",exportedAt:new Date().toISOString(),master:loadMaster(),records:records(),
-    settings:JSON.parse(localStorage.getItem("heatSettings")||"{}")
+    settings:JSON.parse(localStorage.getItem("heatSettings")||"{}"),validations:validations()
   });
 });
 if($("importAllData"))$("importAllData").addEventListener("change",async e=>{
@@ -912,6 +924,7 @@ if($("importAllData"))$("importAllData").addEventListener("change",async e=>{
     if(!Array.isArray(data.records)||!data.master)throw new Error();
     saveRecords(data.records);localStorage.setItem(MASTER_KEY,JSON.stringify(data.master));
     if(data.settings)localStorage.setItem("heatSettings",JSON.stringify(data.settings));
+    if(Array.isArray(data.validations))saveValidations(data.validations);
     renderMaster();renderDashboard();alert("全データを復元しました。");
   }catch{alert("バックアップファイルを復元できませんでした。");}
   e.target.value="";
@@ -921,10 +934,10 @@ renderNotifications();
 
 if($("adminDate")){
   $("adminDate").value=new Date().toISOString().slice(0,10);
-  $("adminDate").addEventListener("change",renderAdminDashboard);
+  $("adminDate").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();});
 }
-if($("adminSite"))$("adminSite").addEventListener("change",renderAdminDashboard);
-if($("adminLevel"))$("adminLevel").addEventListener("change",renderAdminDashboard);
+if($("adminSite"))$("adminSite").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();});
+if($("adminLevel"))$("adminLevel").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();});
 if($("checkMissing"))$("checkMissing").addEventListener("click",checkMissingWorkers);
 if($("exportDailyCsv"))$("exportDailyCsv").addEventListener("click",exportDailyCsv);
 
@@ -956,7 +969,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v9.4プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v9.5プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -1127,5 +1140,278 @@ function clearNotifications(){
   const ids=generateNotifications().map(n=>n.id);
   localStorage.setItem(NOTICE_KEY,JSON.stringify([...new Set([...ack,...ids])]));
   renderNotifications();
+}
+
+const VALIDATION_KEY="heatCheckValidationV95";
+
+function validations(){
+  try{return JSON.parse(localStorage.getItem(VALIDATION_KEY)||"[]");}
+  catch{return [];}
+}
+function saveValidations(list){
+  localStorage.setItem(VALIDATION_KEY,JSON.stringify(list));
+}
+
+function dateRangeRecords(days,site="",team=""){
+  const end=new Date();
+  const start=new Date();
+  start.setHours(0,0,0,0);
+  start.setDate(start.getDate()-(days-1));
+  return records().filter(r=>{
+    const d=new Date(r.timestamp);
+    return d>=start&&d<=end&&(!site||r.siteName===site)&&(!team||r.teamName===team);
+  });
+}
+
+function countLevels(list){
+  const c={green:0,yellow:0,orange:0,red:0};
+  list.forEach(r=>{if(c[r.level]!==undefined)c[r.level]++;});
+  return c;
+}
+
+function percent(n,d){
+  return d?Math.round(n/d*100):0;
+}
+
+function trendDirection(list,key){
+  if(list.length<4)return "データ不足";
+  const sorted=[...list].sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
+  const half=Math.floor(sorted.length/2);
+  const first=sorted.slice(0,half),last=sorted.slice(half);
+  const a=avg(first.map(key)),b=avg(last.map(key));
+  const d=b-a;
+  if(d>=3)return "上昇";
+  if(d<=-3)return "低下";
+  return "横ばい";
+}
+
+function highRiskWorkers(list){
+  const map=new Map();
+  list.forEach(r=>{
+    if(!map.has(r.workerId))map.set(r.workerId,[]);
+    map.get(r.workerId).push(r);
+  });
+  return [...map.entries()].map(([id,rows])=>{
+    rows.sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
+    const latest=rows.at(-1);
+    const cautions=rows.filter(r=>["yellow","orange","red"].includes(r.level)).length;
+    const consecutive=consecutiveCaution(rows);
+    const score=levelRank(latest.level)*3+Math.min(4,consecutive)+Math.min(3,cautions);
+    return {id,name:latest.workerName||id,latest,consecutive,cautions,score};
+  }).filter(x=>x.score>=3).sort((a,b)=>b.score-a.score);
+}
+
+function buildRecommendations(list){
+  const c=countLevels(list);
+  const latestWorkers=latestByWorker(list);
+  const wbgt=list.map(r=>Number(r.context?.wbgt)).filter(Number.isFinite);
+  const maxWbgt=wbgt.length?Math.max(...wbgt):null;
+  const rec=[];
+
+  if(c.red>0){
+    rec.push({type:"danger",title:"赤判定者の即時確認",
+      text:"作業を継続させず、管理者が本人の意識・会話・歩行状態を確認してください。異常があれば救急要請を含めて対応してください。"});
+  }
+  if(c.orange>0){
+    rec.push({type:"danger",title:"橙判定者の作業離脱",
+      text:"涼しい場所で休憩させ、水分・塩分補給後に管理者が再確認してください。"});
+  }
+  const repeated=highRiskWorkers(list).filter(x=>x.consecutive>=2);
+  if(repeated.length){
+    rec.push({type:"warn",title:"注意判定の連続",
+      text:`${repeated.map(x=>x.name).slice(0,5).join("、")}は注意判定が連続しています。作業内容、休憩間隔、体調申告を確認してください。`});
+  }
+  if(maxWbgt!==null&&maxWbgt>=28){
+    rec.push({type:"warn",title:"暑熱環境への対応",
+      text:`対象データの最高WBGTは${maxWbgt.toFixed(1)}です。休憩頻度、水分・塩分補給、作業強度の見直しを行ってください。`});
+  }
+  const noHydration=latestWorkers.filter(r=>String(r.context?.hydration||"").includes("なし"));
+  if(noHydration.length){
+    rec.push({type:"warn",title:"水分補給未実施者",
+      text:`${noHydration.map(r=>r.workerName||r.workerId).slice(0,5).join("、")}は直近記録で水分補給なしとなっています。本人へ確認してください。`});
+  }
+  if(!rec.length){
+    rec.push({type:"",title:"通常監視を継続",
+      text:"現在の保存データでは、特別な対応を要する傾向は確認されていません。本人申告と現場巡視を継続してください。"});
+  }
+  return rec;
+}
+
+function analysisScope(){
+  return {
+    date:selectedAdminDate(),
+    site:$("adminSite")?.value||"",
+    team:$("adminTeam")?.value||""
+  };
+}
+
+function buildDailyReport(list,scope){
+  const c=countLevels(list);
+  const workers=new Set(list.map(r=>r.workerId));
+  const wbgt=list.map(r=>Number(r.context?.wbgt)).filter(Number.isFinite);
+  const avgWbgt=wbgt.length?avg(wbgt).toFixed(1):"未入力";
+  const high=highRiskWorkers(list);
+  const names=high.slice(0,5).map(x=>`${x.name}（${x.latest.label}）`).join("、");
+
+  return [
+    `【暑熱コンディションチェック日報】`,
+    `対象日：${scope.date}`,
+    `対象現場：${scope.site||"全現場"}`,
+    `対象作業班：${scope.team||"全作業班"}`,
+    `測定件数：${list.length}件、測定人数：${workers.size}人`,
+    `判定内訳：緑${c.green}件、黄${c.yellow}件、橙${c.orange}件、赤${c.red}件`,
+    `平均WBGT：${avgWbgt}`,
+    high.length?`要確認者：${names}`:"要確認者：保存データ上は該当なし",
+    `対応状況：本人申告を優先し、黄以上の判定者について管理者が対面確認を行う。`,
+    `備考：本システムは医療診断ではなく、非接触スクリーニング補助として使用する。`
+  ].join("\n");
+}
+
+function buildMonthlyReport(list,scope){
+  const c=countLevels(list);
+  const workers=new Set(list.map(r=>r.workerId));
+  const caution=c.yellow+c.orange+c.red;
+  const colorTrend=trendDirection(list,r=>Number(r.colorChange)||0);
+  const motionTrend=trendDirection(list,r=>Number(r.avgMotion)||0);
+  const high=highRiskWorkers(list).slice(0,5);
+
+  return [
+    `【暑熱コンディションチェック月次傾向】`,
+    `集計期間：直近30日`,
+    `対象現場：${scope.site||"全現場"}`,
+    `対象作業班：${scope.team||"全作業班"}`,
+    `測定件数：${list.length}件、対象人数：${workers.size}人`,
+    `注意判定率：${percent(caution,list.length)}％`,
+    `顔色変化傾向：${colorTrend}`,
+    `顔の動き傾向：${motionTrend}`,
+    high.length?`継続確認対象：${high.map(x=>x.name).join("、")}`:"継続確認対象：該当なし",
+    `総括：測定値のみで健康状態を断定せず、現場巡視・本人申告・WBGT・作業強度を組み合わせて運用する。`
+  ].join("\n");
+}
+
+function renderAnalysis(){
+  const scope=analysisScope();
+  const today=filteredAdminRecords();
+  const month=dateRangeRecords(30,scope.site,scope.team);
+  const c=countLevels(today);
+  const workers=new Set(today.map(r=>r.workerId));
+  const caution=c.yellow+c.orange+c.red;
+  const high=highRiskWorkers(today);
+  const wbgt=today.map(r=>Number(r.context?.wbgt)).filter(Number.isFinite);
+
+  if($("siteTrendSummary")){
+    $("siteTrendSummary").textContent=today.length
+      ?`本日は${workers.size}人、${today.length}件を測定しています。注意判定は${caution}件で、全測定の${percent(caution,today.length)}％です。${wbgt.length?`平均WBGTは${avg(wbgt).toFixed(1)}です。`:"WBGT入力はありません。"}`
+      :"選択条件に該当する本日の測定データはありません。";
+  }
+
+  if($("managerSummary")){
+    let text=today.length
+      ?`緑${c.green}件、黄${c.yellow}件、橙${c.orange}件、赤${c.red}件です。`
+      :"本日の保存データはありません。";
+    if(high.length)text+=` 優先確認対象は${high.slice(0,5).map(x=>x.name).join("、")}です。`;
+    else if(today.length)text+=" 保存データ上、優先確認対象はありません。";
+    text+=" 判定結果だけで作業可否を決めず、管理者による対面確認を行ってください。";
+    $("managerSummary").textContent=text;
+  }
+
+  const rec=buildRecommendations(today);
+  if($("recommendedActions")){
+    $("recommendedActions").innerHTML=rec.map(x=>`
+      <div class="recommendation-item ${x.type}">
+        <strong>${esc(x.title)}</strong><span>${esc(x.text)}</span>
+      </div>`).join("");
+  }
+
+  if($("monthlyTrendSummary")){
+    const mc=countLevels(month);
+    const caution30=mc.yellow+mc.orange+mc.red;
+    $("monthlyTrendSummary").textContent=month.length
+      ?`直近30日は${month.length}件を測定し、注意判定率は${percent(caution30,month.length)}％です。顔色変化は${trendDirection(month,r=>Number(r.colorChange)||0)}、顔の動きは${trendDirection(month,r=>Number(r.avgMotion)||0)}傾向です。`
+      :"直近30日のデータはありません。";
+  }
+
+  if($("dailyReportText"))$("dailyReportText").value=buildDailyReport(today,scope);
+  if($("monthlyReportText"))$("monthlyReportText").value=buildMonthlyReport(month,scope);
+}
+
+function copyTextArea(id){
+  const el=$(id);if(!el)return;
+  navigator.clipboard?.writeText(el.value).then(()=>alert("コメントをコピーしました。"))
+    .catch(()=>{el.select();document.execCommand("copy");alert("コメントをコピーしました。");});
+}
+
+function populateValidationWorkers(){
+  const select=$("validationWorker");if(!select)return;
+  const current=select.value;
+  const map=new Map();
+  records().forEach(r=>{if(r.workerId)map.set(r.workerId,r.workerName||r.workerId);});
+  select.innerHTML='<option value="">作業員を選択</option>'+
+    [...map.entries()].sort((a,b)=>a[1].localeCompare(b[1],"ja"))
+    .map(([id,name])=>`<option value="${esc(id)}">${esc(name)}（${esc(id)}）</option>`).join("");
+  if([...map.keys()].includes(current))select.value=current;
+}
+
+function populateValidationRecords(){
+  const workerId=$("validationWorker")?.value||"";
+  const select=$("validationRecord");if(!select)return;
+  const rows=workerRecords(workerId).slice(-30).reverse();
+  select.innerHTML='<option value="">測定記録を選択</option>'+
+    rows.map(r=>`<option value="${esc(r.timestamp)}">${new Date(r.timestamp).toLocaleString("ja-JP")}／${esc(r.label)}</option>`).join("");
+}
+
+function saveValidationEntry(){
+  const workerId=$("validationWorker").value;
+  const timestamp=$("validationRecord").value;
+  const result=$("validationResult").value;
+  if(!workerId||!timestamp||!result){
+    alert("作業員、測定記録、管理者確認を選択してください。");return;
+  }
+  const record=records().find(r=>r.workerId===workerId&&r.timestamp===timestamp);
+  if(!record){alert("対象記録が見つかりません。");return;}
+  const list=validations();
+  list.unshift({
+    id:`${workerId}_${timestamp}`,
+    workerId,workerName:record.workerName||workerId,timestamp,
+    appLevel:record.level,appLabel:record.label,result,
+    memo:$("validationMemo").value.trim(),
+    createdAt:new Date().toISOString()
+  });
+  saveValidations(list.slice(0,500));
+  $("validationResult").value="";
+  $("validationMemo").value="";
+  renderValidation();
+}
+
+function renderValidation(){
+  populateValidationWorkers();
+  const list=validations();
+  const count=list.length;
+  const mismatch=list.filter(v=>v.result==="判定不一致").length;
+  const action=list.filter(v=>["休憩実施","水分補給実施","作業中止","医療確認"].includes(v.result)).length;
+  const matched=count-mismatch;
+
+  if($("validationCount"))$("validationCount").textContent=count;
+  if($("validationMatchRate"))$("validationMatchRate").textContent=count?`${percent(matched,count)}%`:"--";
+  if($("validationActionRate"))$("validationActionRate").textContent=count?`${percent(action,count)}%`:"--";
+  if($("validationMismatch"))$("validationMismatch").textContent=mismatch;
+
+  const box=$("validationList");if(!box)return;
+  if(!list.length){box.textContent="評価記録はありません。";return;}
+  box.innerHTML=list.slice(0,30).map(v=>`
+    <div class="validation-row">
+      <strong>${esc(v.workerName)}<br><small>${new Date(v.timestamp).toLocaleString("ja-JP")}</small></strong>
+      <span>アプリ：${esc(v.appLabel)}</span>
+      <span>確認：${esc(v.result)}</span>
+      <span>${esc(v.memo||"メモなし")}</span>
+      <button type="button" data-validation-delete="${esc(v.id)}">削除</button>
+    </div>`).join("");
+
+  document.querySelectorAll("[data-validation-delete]").forEach(btn=>{
+    btn.onclick=()=>{
+      saveValidations(validations().filter(v=>v.id!==btn.dataset.validationDelete));
+      renderValidation();
+    };
+  });
 }
 

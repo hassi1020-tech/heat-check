@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f172a">
   <title>現場 顔動画コンディションチェック</title>
-  <link rel="manifest" href="manifest.webmanifest?v=94">
-  <link rel="stylesheet" href="styles.css?v=94">
+  <link rel="manifest" href="manifest.webmanifest?v=95">
+  <link rel="stylesheet" href="styles.css?v=95">
 </head>
 <body>
 <header>
@@ -167,7 +167,100 @@
 
     
     
-    <div class="master-panel">
+    
+    <div class="analysis-panel">
+      <div class="analysis-head">
+        <div>
+          <h3>傾向分析・管理者コメント</h3>
+          <p>保存済みデータから個人・現場全体の変化を整理し、管理者確認用コメントを作成します。</p>
+        </div>
+        <div class="analysis-actions">
+          <button id="copyDailyReport" type="button">日報コメントをコピー</button>
+          <button id="copyMonthlyReport" type="button">月報コメントをコピー</button>
+        </div>
+      </div>
+
+      <div class="analysis-grid">
+        <section class="analysis-card">
+          <h4>現場全体の本日傾向</h4>
+          <div id="siteTrendSummary" class="analysis-text">保存済みデータを分析します。</div>
+        </section>
+
+        <section class="analysis-card">
+          <h4>管理者向け総合コメント</h4>
+          <div id="managerSummary" class="analysis-text">対象日・現場の条件に合わせて表示します。</div>
+        </section>
+
+        <section class="analysis-card">
+          <h4>推奨対応</h4>
+          <div id="recommendedActions" class="recommendation-list">現在、特別な推奨対応はありません。</div>
+        </section>
+
+        <section class="analysis-card">
+          <h4>直近30日の傾向</h4>
+          <div id="monthlyTrendSummary" class="analysis-text">30日分の保存データを集計します。</div>
+        </section>
+      </div>
+
+      <div class="report-preview-grid">
+        <section>
+          <h4>日報用コメント</h4>
+          <textarea id="dailyReportText" rows="8" readonly></textarea>
+        </section>
+        <section>
+          <h4>月報用コメント</h4>
+          <textarea id="monthlyReportText" rows="8" readonly></textarea>
+        </section>
+      </div>
+    </div>
+
+    <div class="validation-panel">
+      <div class="validation-head">
+        <div>
+          <h3>実証評価記録</h3>
+          <p>アプリ判定と管理者の実際の確認結果を記録し、今後の判定基準調整に使用します。</p>
+        </div>
+      </div>
+
+      <div class="validation-entry">
+        <label>対象作業員
+          <select id="validationWorker">
+            <option value="">作業員を選択</option>
+          </select>
+        </label>
+        <label>対象日時
+          <select id="validationRecord">
+            <option value="">測定記録を選択</option>
+          </select>
+        </label>
+        <label>管理者確認
+          <select id="validationResult">
+            <option value="">選択</option>
+            <option value="問題なし">問題なし</option>
+            <option value="休憩実施">休憩実施</option>
+            <option value="水分補給実施">水分補給実施</option>
+            <option value="作業中止">作業中止</option>
+            <option value="医療確認">医療確認</option>
+            <option value="判定不一致">判定不一致</option>
+          </select>
+        </label>
+        <label>管理者メモ
+          <input id="validationMemo" placeholder="本人の状態、対応内容など">
+        </label>
+        <button id="saveValidation" type="button">評価を保存</button>
+      </div>
+
+      <div class="validation-summary-grid">
+        <div><span>評価件数</span><strong id="validationCount">0</strong></div>
+        <div><span>判定一致率</span><strong id="validationMatchRate">--</strong></div>
+        <div><span>対応実施率</span><strong id="validationActionRate">--</strong></div>
+        <div><span>判定不一致</span><strong id="validationMismatch">0</strong></div>
+      </div>
+
+      <div id="validationList" class="validation-list">評価記録はありません。</div>
+    </div>
+
+<div class="master-panel">
       <div class="toolbar master-toolbar">
         <div>
           <h3>現場運用マスタ</h3>
@@ -390,8 +483,8 @@
 </section>
 </main>
 
-<footer>Prototype v9.4（現場・作業員マスタ運用版）</footer>
-<script type="module" src="face-landmarker.js?v=94"></script>
-<script src="app.js?v=94"></script>
+<footer>Prototype v9.5（傾向分析・実証評価版）</footer>
+<script type="module" src="face-landmarker.js?v=95"></script>
+<script src="app.js?v=95"></script>
 </body>
 </html>
