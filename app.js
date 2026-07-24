@@ -390,6 +390,8 @@ $("saveResult").addEventListener("click",()=>{
   if(!state.latestResult)return;
   const rs=records();rs.push(state.latestResult);saveRecords(rs);
   alert("結果を端末内に保存しました。顔画像・動画は保存していません。");
+  updateSummary();
+  populateWorkerSelect();
 });
 $("remeasure").addEventListener("click",()=>{ $("resultCard").classList.add("hidden"); startMeasure(); });
 $("startMeasure").onclick=function(e){
@@ -399,7 +401,213 @@ $("startMeasure").onclick=function(e){
 $("startCamera").addEventListener("click",startCamera);
 $("stopCamera").addEventListener("click",stopCamera);
 
+
+function levelRank(level){
+  return ({green:0,yellow:1,orange:2,red:3})[level] ?? 0;
+}
+
+function levelShort(level){
+  return ({green:"緑",yellow:"黄",orange:"橙",red:"赤"})[level] || "--";
+}
+
+function timingBand(record){
+  const t=record.timing||"";
+  const hour=new Date(record.timestamp).getHours();
+  if(t.includes("朝")||hour<10) return "morning";
+  if(t.includes("昼")||(hour>=10&&hour<14)) return "noon";
+  return "afternoon";
+}
+
+function workerRecords(workerId){
+  return records()
+    .filter(r=>r.workerId===workerId)
+    .sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
+}
+
+function populateWorkerSelect(){
+  const select=$("workerSelect");
+  if(!select)return;
+  const current=select.value;
+  const map=new Map();
+  records().forEach(r=>{
+    if(r.workerId)map.set(r.workerId,r.workerName||r.workerId);
+  });
+  const items=[...map.entries()].sort((a,b)=>a[1].localeCompare(b[1],"ja"));
+  select.innerHTML='<option value="">作業員を選択</option>'+
+    items.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}（${esc(id)}）</option>`).join("");
+  if(items.some(([id])=>id===current))select.value=current;
+}
+
+function differenceComment(latest,previous){
+  if(!previous)return "初回記録";
+  const color=(Number(latest.colorChange)||0)-(Number(previous.colorChange)||0);
+  const motion=(Number(latest.avgMotion)||0)-(Number(previous.avgMotion)||0);
+  const level=levelRank(latest.level)-levelRank(previous.level);
+
+  if(level>=1)return "判定が悪化";
+  if(level<=-1)return "判定が改善";
+  if(color>=3||motion>=3)return "顔状態がやや悪化";
+  if(color<=-3&&motion<=1)return "顔状態が改善";
+  return "大きな変化なし";
+}
+
+function consecutiveCaution(list){
+  let count=0;
+  for(let i=list.length-1;i>=0;i--){
+    if(["yellow","orange","red"].includes(list[i].level))count++;
+    else break;
+  }
+  return count;
+}
+
+function averageBand(list,band){
+  const filtered=list.filter(r=>timingBand(r)===band);
+  if(!filtered.length)return "--";
+  const recent=filtered.slice(-5);
+  const maxLevel=Math.max(...recent.map(r=>levelRank(r.level)));
+  const avgColor=avg(recent.map(r=>Number(r.colorChange)||0));
+  return `${levelShort(["green","yellow","orange","red"][maxLevel])}・変化${avgColor.toFixed(1)}`;
+}
+
+function trendComment(list){
+  if(!list.length)return "保存済みデータがありません。";
+  const latest=list.at(-1);
+  const previous=list.length>1?list.at(-2):null;
+  const caution=consecutiveCaution(list);
+  const parts=[];
+
+  if(previous)parts.push(`前回比：${differenceComment(latest,previous)}。`);
+  if(caution>=2)parts.push(`注意判定が${caution}回連続しています。管理者による対面確認を推奨します。`);
+  else if(latest.level==="orange"||latest.level==="red")parts.push("直近判定は管理者確認が必要な水準です。");
+
+  const today=new Date().toISOString().slice(0,10);
+  const todayList=list.filter(r=>(r.timestamp||"").slice(0,10)===today);
+  if(todayList.length>=2){
+    const first=todayList[0],last=todayList.at(-1);
+    const d=(Number(last.colorChange)||0)-(Number(first.colorChange)||0);
+    if(d>=3)parts.push("本日は朝から顔色変化が増えています。");
+    else if(d<=-3)parts.push("本日は朝より顔色変化が小さくなっています。");
+    else parts.push("本日の顔色変化は概ね横ばいです。");
+  }
+
+  if(latest.context?.wbgt>=28)parts.push(`直近WBGTは${latest.context.wbgt}で、環境負荷が高めです。`);
+  return parts.join(" ")||"大きな悪化傾向は確認されていません。";
+}
+
+function drawTrendChart(list){
+  const canvas=$("workerTrendChart");
+  if(!canvas)return;
+  const ctx=canvas.getContext("2d");
+  const dpr=window.devicePixelRatio||1;
+  const cssW=Math.max(320,canvas.clientWidth||900);
+  const cssH=260;
+  canvas.width=Math.round(cssW*dpr);
+  canvas.height=Math.round(cssH*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cssW,cssH);
+  ctx.font="12px sans-serif";
+
+  const data=list.slice(-12);
+  const pad={l:42,r:20,t:18,b:42};
+  const w=cssW-pad.l-pad.r,h=cssH-pad.t-pad.b;
+
+  ctx.strokeStyle="#cbd5e1";
+  ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y=pad.t+h*i/4;
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+w,y);ctx.stroke();
+  }
+
+  if(!data.length){
+    ctx.fillStyle="#64748b";
+    ctx.textAlign="center";
+    ctx.fillText("作業員を選択すると履歴を表示します",cssW/2,cssH/2);
+    return;
+  }
+
+  const values=data.flatMap(r=>[
+    Number(r.colorChange)||0,
+    Number(r.avgMotion)||0,
+    Number(r.context?.wbgt)||0
+  ]);
+  const max=Math.max(10,...values);
+  const x=i=>data.length===1?pad.l+w/2:pad.l+w*i/(data.length-1);
+  const y=v=>pad.t+h-(Math.min(max,v)/max)*h;
+
+  const series=[
+    {key:r=>Number(r.colorChange)||0,width:3},
+    {key:r=>Number(r.avgMotion)||0,width:2},
+    {key:r=>Number(r.context?.wbgt)||0,width:2}
+  ];
+
+  const dashPatterns=[[],[6,4],[2,4]];
+  series.forEach((s,si)=>{
+    ctx.save();
+    ctx.strokeStyle=["#0f766e","#475569","#a16207"][si];
+    ctx.lineWidth=s.width;
+    ctx.setLineDash(dashPatterns[si]);
+    ctx.beginPath();
+    data.forEach((r,i)=>{
+      const px=x(i),py=y(s.key(r));
+      if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+    });
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  ctx.fillStyle="#64748b";
+  ctx.textAlign="center";
+  data.forEach((r,i)=>{
+    if(data.length<=6||i%2===0||i===data.length-1){
+      const d=new Date(r.timestamp);
+      ctx.fillText(`${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:00`,x(i),cssH-16);
+    }
+  });
+}
+
+function renderWorkerCard(){
+  const select=$("workerSelect");
+  if(!select)return;
+  const id=select.value;
+  const alertBox=$("workerAlert");
+
+  if(!id){
+    alertBox.className="worker-alert neutral";
+    alertBox.textContent="作業員を選択してください。";
+    ["cardLatest","cardDifference","cardTodayCount","cardConsecutive","bandMorning","bandNoon","bandAfternoon"]
+      .forEach(x=>$(x).textContent=x==="cardTodayCount"||x==="cardConsecutive"?"0回":"--");
+    $("workerComment").textContent="保存済みデータが3件以上になると、傾向コメントの精度が上がります。";
+    drawTrendChart([]);
+    return;
+  }
+
+  const list=workerRecords(id);
+  const latest=list.at(-1);
+  const previous=list.length>1?list.at(-2):null;
+  const today=new Date().toISOString().slice(0,10);
+  const todayCount=list.filter(r=>(r.timestamp||"").slice(0,10)===today).length;
+  const caution=consecutiveCaution(list);
+
+  $("cardLatest").textContent=latest?latest.label:"--";
+  $("cardDifference").textContent=latest?differenceComment(latest,previous):"--";
+  $("cardTodayCount").textContent=`${todayCount}回`;
+  $("cardConsecutive").textContent=`${caution}回`;
+  $("bandMorning").textContent=averageBand(list,"morning");
+  $("bandNoon").textContent=averageBand(list,"noon");
+  $("bandAfternoon").textContent=averageBand(list,"afternoon");
+  $("workerComment").textContent=trendComment(list);
+
+  if(latest){
+    alertBox.className=`worker-alert ${latest.level}`;
+    alertBox.textContent=caution>=2
+      ?`${latest.workerName}：注意判定が${caution}回連続しています。`
+      :`${latest.workerName}：直近は「${latest.label}」です。`;
+  }
+  drawTrendChart(list);
+}
 function renderDashboard(){
+  updateSummary();
+  populateWorkerSelect();
   const rs=records().sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp));
   const counts={green:0,yellow:0,orange:0,red:0};rs.forEach(r=>counts[r.level]++);
   $("summary").innerHTML=[
@@ -411,8 +619,16 @@ function renderDashboard(){
     <td>${esc(r.timing)}</td><td class="level-cell">${esc(r.label)}</td>
     <td>${esc(r.colorChangeLabel||"--")}</td><td>${esc(r.qualityLabel)}</td>
     <td>${esc(r.instruction)}</td></tr>`).join("");
+  renderWorkerCard();
 }
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+
+if($("workerSelect")){
+  $("workerSelect").addEventListener("change",renderWorkerCard);
+}
+window.addEventListener("resize",()=>{
+  if($("workerSelect")?.value)renderWorkerCard();
+});
 
 $("exportCsv").addEventListener("click",()=>{
   const rs=records();
@@ -435,7 +651,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v9.0プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v9.1プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
