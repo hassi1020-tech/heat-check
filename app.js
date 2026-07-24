@@ -6,7 +6,7 @@ const state = {
 };
 
 const defaults = {
-  durationSec:15, yellowDelta:20, orangeDelta:35,
+  durationSec:25, warmupSec:5, yellowDelta:20, orangeDelta:35,
   yellowBpm:100, orangeBpm:120, retryMin:10
 };
 
@@ -66,36 +66,47 @@ function validateFields(){
 }
 
 async function startMeasure(){
+  $("guide").textContent="測定開始処理を確認しています…";
   if(!validateFields()){ alert("作業員ID・作業員名・現場名を入力してください。"); return; }
   if(!state.stream) return;
+
+  const cfg=settings();
+  const warmup=cfg.warmupSec ?? 5;
+  const duration=cfg.durationSec;
   state.measuring=true; state.samples=[]; state.lastGray=null; state.latestResult=null;
   $("resultCard").classList.add("hidden");
   $("startMeasure").disabled=true; $("stopCamera").disabled=true;
-  const duration=settings().durationSec;
+  $("guide").textContent=`最初の${warmup}秒は準備中です。顔を動かさず、画面を見てください。`;
+
   const start=performance.now();
   const work=document.createElement("canvas");
-  work.width=160;work.height=120;
+  work.width=200;work.height=150;
   const ctx=work.getContext("2d",{willReadFrequently:true});
+  let lastSampleAt=0;
 
   const loop=async()=>{
     if(!state.measuring) return;
     const elapsed=(performance.now()-start)/1000;
-    $("countdown").textContent=Math.max(0,duration-elapsed).toFixed(1);
+    const measureElapsed=Math.max(0,elapsed-warmup);
+    $("countdown").textContent = elapsed < warmup
+      ? `準備 ${Math.ceil(warmup-elapsed)}`
+      : Math.max(0,duration-measureElapsed).toFixed(1);
+
     ctx.drawImage($("video"),0,0,work.width,work.height);
 
-    let roi={x:52,y:18,w:56,h:38};
-    if(state.faceDetector && Math.floor(elapsed*5)!==Math.floor((elapsed-.06)*5)){
+    let roi={x:64,y:22,w:72,h:46};
+    if(state.faceDetector && Math.floor(elapsed*4)!==Math.floor((elapsed-.08)*4)){
       try{
         const faces=await state.faceDetector.detect(work);
         if(faces[0]){
           const b=faces[0].boundingBox;
-          roi={x:b.x+b.width*.22,y:b.y+b.height*.12,w:b.width*.56,h:b.height*.28};
+          roi={x:b.x+b.width*.20,y:b.y+b.height*.10,w:b.width*.60,h:b.height*.30};
         }
       }catch{}
     }
     roi.x=Math.max(0,Math.floor(roi.x)); roi.y=Math.max(0,Math.floor(roi.y));
-    roi.w=Math.min(work.width-roi.x,Math.max(10,Math.floor(roi.w)));
-    roi.h=Math.min(work.height-roi.y,Math.max(10,Math.floor(roi.h)));
+    roi.w=Math.min(work.width-roi.x,Math.max(12,Math.floor(roi.w)));
+    roi.h=Math.min(work.height-roi.y,Math.max(12,Math.floor(roi.h)));
 
     const img=ctx.getImageData(roi.x,roi.y,roi.w,roi.h).data;
     let r=0,g=0,b=0,lum=0; const gray=new Uint8Array(img.length/4);
@@ -111,13 +122,23 @@ async function startMeasure(){
       motion/=(n/4);
     }
     state.lastGray=gray;
-    state.samples.push({t:performance.now()/1000,g,r,b,lum,motion});
-    if(state.samples.length>80){
-      const quick=analyzeSignal(state.samples.slice(-80));
+
+    // 約20fpsに間引き、準備時間中のデータは保存しない
+    if(elapsed>=warmup && performance.now()-lastSampleAt>=45){
+      state.samples.push({t:performance.now()/1000,g,r,b,lum,motion});
+      lastSampleAt=performance.now();
+    }
+
+    if(elapsed>=warmup && state.samples.length>120){
+      const quick=analyzeSignal(state.samples.slice(-160));
       $("bpmLive").textContent=quick.bpm?Math.round(quick.bpm):"--";
       $("quality").textContent=quick.qualityLabel;
+      $("guide").textContent = quick.qualityLabel==="良好"
+        ? "測定中です。そのまま動かないでください"
+        : "信号が不安定です。明るい場所でスマホを固定してください";
     }
-    if(elapsed>=duration){ finishMeasure(); return; }
+
+    if(measureElapsed>=duration){ finishMeasure(); return; }
     state.timer=requestAnimationFrame(loop);
   };
   loop();
@@ -135,44 +156,54 @@ function std(arr){
   return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/Math.max(1,arr.length));
 }
 function analyzeSignal(samples){
-  if(samples.length<60) return {bpm:null,quality:0,qualityLabel:"不足"};
-  const times=samples.map(x=>x.t), gs=samples.map(x=>x.g);
-  const duration=times.at(-1)-times[0], fs=(samples.length-1)/duration;
-  const trend=movingAverage(gs,Math.max(3,Math.round(fs*1.2)));
-  const sig=gs.map((v,i)=>v-trend[i]);
-  const sm=movingAverage(sig,Math.max(1,Math.round(fs*.12)));
-  const minDist=Math.round(fs*.42); // max ~143 bpm
-  const peaks=[];
-  const threshold=std(sm)*.25;
-  for(let i=2;i<sm.length-2;i++){
-    if(sm[i]>sm[i-1]&&sm[i]>=sm[i+1]&&sm[i]>threshold){
-      if(!peaks.length||i-peaks.at(-1)>=minDist) peaks.push(i);
-      else if(sm[i]>sm[peaks.at(-1)]) peaks[peaks.length-1]=i;
+  if(samples.length<180) return {bpm:null,quality:0,qualityLabel:"不足",avgMotion:99,avgLum:0,pulseStrength:0};
+
+  const times=samples.map(x=>x.t);
+  const duration=times.at(-1)-times[0];
+  const fs=(samples.length-1)/Math.max(.001,duration);
+  const gs=samples.map(x=>x.g);
+  const rs=samples.map(x=>x.r);
+
+  // 緑成分主体、赤成分を少量差し引き
+  const raw=gs.map((v,i)=>v-rs[i]*0.20);
+  const trend=movingAverage(raw,Math.max(5,Math.round(fs*1.5)));
+  let sig=raw.map((v,i)=>v-trend[i]);
+  const mean=sig.reduce((a,b)=>a+b,0)/sig.length;
+  sig=sig.map(v=>v-mean);
+
+  // ハニング窓
+  const win=sig.map((v,i)=>v*(0.5-0.5*Math.cos(2*Math.PI*i/(sig.length-1))));
+
+  // 0.75–2.5Hz（45–150bpm）を細かく走査
+  let bestF=null,bestPower=-1,totalPower=0;
+  for(let f=.75;f<=2.5;f+=.01){
+    let re=0,im=0;
+    for(let i=0;i<win.length;i++){
+      const t=times[i]-times[0];
+      re+=win[i]*Math.cos(2*Math.PI*f*t);
+      im-=win[i]*Math.sin(2*Math.PI*f*t);
     }
+    const p=re*re+im*im;
+    totalPower+=p;
+    if(p>bestPower){bestPower=p;bestF=f;}
   }
-  const intervals=[];
-  for(let i=1;i<peaks.length;i++){
-    const d=times[peaks[i]]-times[peaks[i-1]];
-    if(d>.4&&d<1.5) intervals.push(d);
-  }
-  let bpm=null;
-  if(intervals.length>=3){
-    intervals.sort((a,b)=>a-b);
-    const med=intervals[Math.floor(intervals.length/2)];
-    bpm=60/med;
-    if(bpm<40||bpm>160) bpm=null;
-  }
+
   const avgMotion=samples.reduce((a,x)=>a+x.motion,0)/samples.length;
   const avgLum=samples.reduce((a,x)=>a+x.lum,0)/samples.length;
-  const pulseStrength=std(sm);
+  const pulseStrength=std(sig);
+  const peakRatio=bestPower/Math.max(1,totalPower/176);
+  let bpm=bestF?bestF*60:null;
+
   let quality=100;
-  quality-=Math.min(55,avgMotion*3.2);
-  if(avgLum<45||avgLum>220) quality-=35;
-  if(pulseStrength<.12) quality-=30;
-  if(!bpm) quality-=25;
+  quality-=Math.min(60,avgMotion*4.2);
+  if(avgLum<55||avgLum>215) quality-=35;
+  if(pulseStrength<.08) quality-=25;
+  if(peakRatio<4) quality-=30;
+  if(bpm<45||bpm>150){bpm=null;quality-=30;}
   quality=Math.max(0,Math.min(100,quality));
-  const qualityLabel=quality>=70?"良好":quality>=45?"注意":"不良";
-  return {bpm,quality,qualityLabel,avgMotion,avgLum,pulseStrength};
+
+  const qualityLabel=quality>=72?"良好":quality>=52?"注意":"不良";
+  return {bpm,quality,qualityLabel,avgMotion,avgLum,pulseStrength,peakRatio};
 }
 
 function workerBaseline(workerId){
@@ -203,8 +234,8 @@ function finishMeasure(){
 
 function judge(a,redness,baseline,delta){
   const s=settings();
-  if(a.quality<45 || !a.bpm){
-    return {level:"yellow",label:"黄：再測定",instruction:"測定品質が不十分です。姿勢・照明・カメラ位置を整え、休憩場所で再測定してください。"};
+  if(a.quality<52 || !a.bpm){
+    return {level:"yellow",label:"判定保留：再測定",instruction:"測定品質が不十分なため、体調判定は行っていません。明るい日陰または室内でスマホを固定し、マスク・ヘルメットを外せる安全な状況で再測定してください。"};
   }
   const recent=records().filter(r=>r.workerId===$("workerId").value.trim()).slice(-1)[0];
   const repeatedOrange=recent && recent.level==="orange" && (Date.now()-Date.parse(recent.timestamp)<30*60*1000);
@@ -245,6 +276,7 @@ $("saveResult").addEventListener("click",()=>{
   alert("結果を端末内に保存しました。顔画像・動画は保存していません。");
 });
 $("remeasure").addEventListener("click",()=>{ $("resultCard").classList.add("hidden"); startMeasure(); });
+$("startMeasure").addEventListener("click",startMeasure);
 $("startCamera").addEventListener("click",startCamera);
 $("stopCamera").addEventListener("click",stopCamera);
 

@@ -52,13 +52,13 @@
       <div id="guide">顔を枠内に入れ、できるだけ動かないでください</div>
     </div>
     <div class="meter-row">
-      <div><span>残り</span><strong id="countdown">15.0</strong>秒</div>
+      <div><span>残り</span><strong id="countdown">準備</strong></div>
       <div><span>信号品質</span><strong id="quality">未測定</strong></div>
       <div><span>推定脈拍</span><strong id="bpmLive">--</strong></div>
     </div>
     <div class="actions">
       <button id="startCamera">カメラ開始</button>
-      <button id="startMeasure" class="primary" disabled>15秒測定</button>
+      <button id="startMeasure" class="primary" disabled>測定開始</button>
       <button id="stopCamera" disabled>カメラ停止</button>
     </div>
     <p class="note">通常カメラの映像から顔周辺の色変化・動き・明るさを解析します。照明、日焼け、汗、マスク、カメラ性能で結果が変わります。</p>
@@ -119,8 +119,11 @@
   <div class="card">
     <h2>設定</h2>
     <div class="form-grid">
-      <label>測定時間（秒）
-        <input id="durationSec" type="number" min="10" max="30" value="15">
+      <label>準備時間（秒）
+        <input id="warmupSec" type="number" min="3" max="10" value="5">
+      </label>
+      <label>本測定時間（秒）
+        <input id="durationSec" type="number" min="20" max="40" value="25">
       </label>
       <label>黄判定 脈拍差（bpm）
         <input id="yellowDelta" type="number" min="10" max="50" value="20">
@@ -151,7 +154,7 @@
 </section>
 </main>
 
-<footer>Prototype v1.0 / Local-only storage</footer>
+<footer>Prototype v3.0（測定ボタン修正版）</footer>
 <script src="app.js"></script>
 </body>
 </html>
