@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f172a">
   <title>現場 顔動画コンディションチェック</title>
-  <link rel="manifest" href="manifest.webmanifest?v=101">
-  <link rel="stylesheet" href="styles.css?v=101">
+  <link rel="manifest" href="manifest.webmanifest?v=102">
+  <link rel="stylesheet" href="styles.css?v=102">
 </head>
 <body>
 <header>
@@ -184,47 +184,53 @@
     
     
     
-    <div id="aiResultPanel" class="ai-result-panel result-hidden" aria-live="polite">
-      <div class="ai-result-header">
-        <div>
-          <span class="ai-result-kicker">AIコンディション評価</span>
+    
+    <div id="aiResultPanel" class="decision-panel result-hidden" aria-live="polite">
+      <div class="decision-main">
+        <div id="decisionSignal" class="decision-signal">⚪</div>
+        <div class="decision-title-wrap">
+          <span id="decisionLevel" class="decision-level">測定待ち</span>
           <h2 id="aiResultTitle">測定結果を待っています</h2>
+          <div id="decisionPrimaryAction" class="decision-primary-action">
+            測定完了後、ここに最優先行動を表示します。
+          </div>
         </div>
-        <div id="aiResultScore" class="ai-result-score">--<small>/100</small></div>
+        <div id="aiResultScore" class="decision-score">--<small>/100</small></div>
       </div>
 
-      <div id="aiResultSummary" class="ai-result-summary">
-        測定完了後、ここに総合評価を表示します。
+      <div id="aiResultSummary" class="decision-summary">
+        測定完了後、AIコンディション評価を表示します。
       </div>
 
-      <div class="ai-result-grid">
-        <section class="ai-result-box">
-          <h3>判定の主な要因</h3>
-          <div id="aiResultFactors" class="ai-result-list">
+      <div class="decision-content-grid">
+        <section class="decision-card">
+          <h3>判定理由</h3>
+          <div id="aiResultFactors" class="decision-list">
             <div>まだ測定されていません。</div>
           </div>
         </section>
 
-        <section class="ai-result-box action-box">
-          <h3>今すぐ行うこと</h3>
-          <div id="aiResultActions" class="ai-result-list">
+        <section class="decision-card action-card">
+          <h3>今やること</h3>
+          <div id="aiResultActions" class="decision-action-list">
             <div>測定後に推奨対応を表示します。</div>
           </div>
         </section>
-
-        <section class="ai-result-box">
-          <h3>再確認の目安</h3>
-          <div id="aiResultRecheck" class="ai-result-emphasis">--</div>
-        </section>
-
-        <section class="ai-result-box">
-          <h3>管理者への連絡</h3>
-          <div id="aiResultManager" class="ai-result-emphasis">--</div>
-        </section>
       </div>
 
-      <div id="aiResultWarning" class="ai-result-warning">
-        本評価は医療診断ではありません。本人の症状申告と管理者の対面確認を優先してください。
+      <div class="decision-meta-grid">
+        <div>
+          <span>再確認の目安</span>
+          <strong id="aiResultRecheck">--</strong>
+        </div>
+        <div>
+          <span>管理者への連絡</span>
+          <strong id="aiResultManager">--</strong>
+        </div>
+      </div>
+
+      <div id="aiResultWarning" class="decision-warning">
+        この結果はAIによるコンディション評価です。本人の体調申告と管理者の判断を優先してください。
       </div>
     </div>
 
@@ -587,8 +593,8 @@
 </section>
 </main>
 
-<footer>Prototype v10.1（AI評価コメント強化版）</footer>
-<script type="module" src="face-landmarker.js?v=101"></script>
-<script src="app.js?v=101"></script>
+<footer>Prototype v10.2（判断結果シンプル表示版）</footer>
+<script type="module" src="face-landmarker.js?v=102"></script>
+<script src="app.js?v=102"></script>
 </body>
 </html>

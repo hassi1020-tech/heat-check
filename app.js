@@ -1,4 +1,26 @@
 
+
+function decisionLevelText(r,score){
+  if(score>=80||r.level==="red")return "レベル4・危険";
+  if(score>=60||r.level==="orange")return "レベル3・要休憩";
+  if(score>=35||r.level==="yellow")return "レベル2・注意";
+  return "レベル1・良好";
+}
+
+function decisionSignal(r,score){
+  if(score>=80||r.level==="red")return "🔴";
+  if(score>=60||r.level==="orange")return "🟠";
+  if(score>=35||r.level==="yellow")return "🟡";
+  return "🟢";
+}
+
+function decisionPrimaryAction(r,score){
+  if(score>=80||r.level==="red")return "作業を中止してください";
+  if(score>=60||r.level==="orange")return "涼しい場所で休憩してください";
+  if(score>=35||r.level==="yellow")return "水分補給して早めに再確認してください";
+  return "通常どおり監視を継続してください";
+}
+
 function aiCommentFactors(r,score){
   const factors=[];
   const wbgt=Number(r.context?.wbgt);
@@ -62,10 +84,10 @@ function aiCommentActions(r,score){
 }
 
 function aiResultTitle(r,score){
-  if(score>=80||r.level==="red")return "危険度が非常に高い状態です";
-  if(score>=60||r.level==="orange")return "作業を離れて確認が必要です";
-  if(score>=35||r.level==="yellow")return "注意して早めに再確認してください";
-  return "現時点で大きな注意変化はありません";
+  if(score>=80||r.level==="red")return "危険";
+  if(score>=60||r.level==="orange")return "要休憩";
+  if(score>=35||r.level==="yellow")return "注意";
+  return "コンディション良好";
 }
 
 function aiResultSummary(r,score){
@@ -108,6 +130,9 @@ function renderAiResultComment(r){
   panel.classList.remove("result-hidden","level-green","level-yellow","level-orange","level-red");
   panel.classList.add(`level-${r.level||"green"}`);
 
+  $("decisionSignal").textContent=decisionSignal(r,score);
+  $("decisionLevel").textContent=decisionLevelText(r,score);
+  $("decisionPrimaryAction").textContent=decisionPrimaryAction(r,score);
   $("aiResultTitle").textContent=aiResultTitle(r,score);
   $("aiResultScore").innerHTML=`${score}<small>/100</small>`;
   $("aiResultSummary").textContent=aiResultSummary(r,score);
@@ -1105,7 +1130,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.1プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v10.2プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
