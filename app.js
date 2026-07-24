@@ -404,7 +404,7 @@ function finishMeasure(){
   const result=judge(face,context,baseline);
   state.latestResult={...result,...face,context,baseline,
     workerId:$("workerId").value.trim(),workerName:$("workerName").value.trim(),
-    siteName:$("siteName").value.trim(),teamName:$("teamName")?.value.trim()||"",timing:$("timing").value,
+    siteName:$("siteName").value.trim(),teamName:$("teamName")?.value.trim()||"",workType:$("workType")?.value||"general",timing:$("timing").value,
     timestamp:new Date().toISOString()};
   showResult(state.latestResult);
 }
@@ -473,6 +473,12 @@ function showResult(r){
   $("resultContext").textContent=`${wbgtText}・症状${symptomN}件`;
   if($("facePosition"))$("facePosition").textContent=r.positionLabel;
   if($("lightingStatus"))$("lightingStatus").textContent=r.lightingLabel;
+  const history=records().filter(x=>x.workerId===r.workerId);
+  const riskScore=numericRiskScore(r,history);
+  r.riskScore=riskScore;
+  const forecast=workerRiskForecast(r.workerId,[...history,r]);
+  if($("riskScoreStatus"))$("riskScoreStatus").textContent=`${riskScore}/100`;
+  if($("forecastStatus"))$("forecastStatus").textContent=forecast.status;
   if($("trackingStatus"))$("trackingStatus").textContent=(r.trackingRate||0)>=70?"追従良好":(r.trackingRate||0)>=35?"追従注意":"固定枠方式";
   if($("poseStatus"))$("poseStatus").textContent=r.poseLabel||"未確認";
   if($("blinkStatus"))$("blinkStatus").textContent=r.blinkLabel||"未確認";
@@ -493,6 +499,7 @@ $("saveResult").addEventListener("click",()=>{
   populateWorkerSelect();
   renderAdminDashboard();
   renderNotifications();
+  renderV10();
   renderAnalysis();
   renderValidation();
 });
@@ -835,13 +842,13 @@ function exportDailyCsv(){
   }
 
   const headers=[
-    "日時","現場","作業班","作業員ID","作業員名","区分","判定",
+    "日時","現場","作業班","作業内容","作業員ID","作業員名","区分","判定","危険度スコア",
     "顔色変化","赤み変化","顔の動き","映像品質","左右差",
     "WBGT","作業強度","水分補給","本人申告","管理指示"
   ];
   const rows=[headers,...list.map(r=>[
     new Date(r.timestamp).toLocaleString("ja-JP"),
-    r.siteName,r.teamName||"",r.workerId,r.workerName,r.timing,r.label,
+    r.siteName,r.teamName||"",WORK_TYPE_LABELS[r.workType||"general"]||"一般作業",r.workerId,r.workerName,r.timing,r.label,numericRiskScore(r,records().filter(x=>x.workerId===r.workerId)),
     r.colorChange?.toFixed?.(2)??r.colorChange??"",
     r.rednessChange?.toFixed?.(2)??r.rednessChange??"",
     r.motionLabel||"",
@@ -865,6 +872,7 @@ function exportDailyCsv(){
 }
 function renderDashboard(){
   updateSummary();
+  renderV10();
   renderAnalysis();
   renderValidation();
   renderAdminDashboard();
@@ -886,6 +894,10 @@ function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&l
 
 
 
+
+if($("openMonitorMode"))$("openMonitorMode").addEventListener("click",toggleMonitorMode);
+renderV10();
+
 if($("copyDailyReport"))$("copyDailyReport").addEventListener("click",()=>copyTextArea("dailyReportText"));
 if($("copyMonthlyReport"))$("copyMonthlyReport").addEventListener("click",()=>copyTextArea("monthlyReportText"));
 if($("validationWorker"))$("validationWorker").addEventListener("change",populateValidationRecords);
@@ -898,7 +910,7 @@ if($("addTeamMaster"))$("addTeamMaster").addEventListener("click",addTeamMaster)
 if($("addWorkerMaster"))$("addWorkerMaster").addEventListener("click",addWorkerMaster);
 if($("workerId"))$("workerId").addEventListener("change",fillWorkerFromMaster);
 if($("clearNotifications"))$("clearNotifications").addEventListener("click",clearNotifications);
-if($("adminTeam"))$("adminTeam").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();});
+if($("adminTeam"))$("adminTeam").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();renderV10();});
 if($("exportMasterJson"))$("exportMasterJson").addEventListener("click",()=>{
   downloadJson(`heat-check-master_${new Date().toISOString().slice(0,10)}.json`,loadMaster());
 });
@@ -934,10 +946,10 @@ renderNotifications();
 
 if($("adminDate")){
   $("adminDate").value=new Date().toISOString().slice(0,10);
-  $("adminDate").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();});
+  $("adminDate").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();renderV10();});
 }
-if($("adminSite"))$("adminSite").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();});
-if($("adminLevel"))$("adminLevel").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();});
+if($("adminSite"))$("adminSite").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();renderV10();});
+if($("adminLevel"))$("adminLevel").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();renderV10();});
 if($("checkMissing"))$("checkMissing").addEventListener("click",checkMissingWorkers);
 if($("exportDailyCsv"))$("exportDailyCsv").addEventListener("click",exportDailyCsv);
 
@@ -950,7 +962,7 @@ window.addEventListener("resize",()=>{
 
 $("exportCsv").addEventListener("click",()=>{
   const rs=records();
-  const headers=["日時","現場","作業班","作業員ID","作業員名","区分","判定","顔色変化","赤み変化","明るさ変化","顔の動き","映像品質","左右差","WBGT","作業強度","水分補給","本人申告","指示"];
+  const headers=["日時","現場","作業班","作業内容","作業員ID","作業員名","区分","判定","危険度スコア","顔色変化","赤み変化","明るさ変化","顔の動き","映像品質","左右差","WBGT","作業強度","水分補給","本人申告","指示"];
   const rows=rs.map(r=>[
     new Date(r.timestamp).toLocaleString("ja-JP"),r.siteName,r.workerId,r.workerName,r.timing,
     r.label,r.colorChangeLabel||"",r.rednessChange?.toFixed(2)??"",r.brightnessChange?.toFixed(2)??"",r.motionLabel||"",r.qualityLabel,r.asymmetryLabel||"",r.context?.wbgt??"",r.context?.workload??"",r.context?.hydration??"",r.context?.selfCondition??"",r.instruction
@@ -969,7 +981,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v9.5プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v10.0プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -1413,5 +1425,174 @@ function renderValidation(){
       renderValidation();
     };
   });
+}
+
+const WORK_TYPE_WEIGHTS={
+  light:0,general:3,electrical:4,piping:7,scaffold:10,civil:9,welding:12,confined:14
+};
+const WORK_TYPE_LABELS={
+  light:"軽作業・監視",general:"一般作業",electrical:"電気・計装",
+  piping:"配管・機械据付",scaffold:"足場・高所",civil:"土木・掘削",
+  welding:"溶接・火気",confined:"槽内・閉所"
+};
+
+function numericRiskScore(record,workerHistory=[]){
+  let score=0;
+  const levelBase={green:12,yellow:38,orange:65,red:88};
+  score+=levelBase[record.level]??20;
+
+  const wbgt=Number(record.context?.wbgt);
+  if(Number.isFinite(wbgt)){
+    if(wbgt>=33)score+=18;
+    else if(wbgt>=31)score+=14;
+    else if(wbgt>=28)score+=9;
+    else if(wbgt>=25)score+=4;
+  }
+
+  const work=record.workType||record.context?.workType||"general";
+  score+=WORK_TYPE_WEIGHTS[work]??3;
+
+  const hydration=String(record.context?.hydration||"");
+  if(hydration.includes("なし"))score+=8;
+  if(hydration.includes("少"))score+=4;
+
+  const self=String(record.context?.selfReport||record.context?.condition||"");
+  if(/悪|つら|不調|異常|だる|吐|頭痛|めまい/.test(self))score+=15;
+
+  const symptoms=record.context?.symptoms;
+  if(Array.isArray(symptoms))score+=Math.min(20,symptoms.length*5);
+  else if(symptoms&&String(symptoms)!=="なし")score+=8;
+
+  if(Number(record.quality)<45)score+=4;
+  if(Number(record.positionScore)<45)score+=3;
+  if(Number(record.colorChange)>20)score+=5;
+  if(Number(record.asymmetry)>15)score+=4;
+
+  const recent=[...workerHistory].sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp)).slice(-4);
+  const recentCautions=recent.filter(r=>["yellow","orange","red"].includes(r.level)).length;
+  if(recentCautions>=2)score+=6;
+  if(recentCautions>=3)score+=5;
+
+  return Math.max(0,Math.min(100,Math.round(score)));
+}
+
+function scoreClass(score){
+  if(score>=80)return "critical";
+  if(score>=60)return "high";
+  if(score>=35)return "mid";
+  return "low";
+}
+
+function scoreLabel(score){
+  if(score>=80)return "非常に高い";
+  if(score>=60)return "高い";
+  if(score>=35)return "注意";
+  return "低い";
+}
+
+function enrichedRecords(list=records()){
+  const byWorker=new Map();
+  list.forEach(r=>{
+    if(!byWorker.has(r.workerId))byWorker.set(r.workerId,[]);
+    byWorker.get(r.workerId).push(r);
+  });
+  return list.map(r=>({
+    ...r,
+    riskScore:numericRiskScore(r,byWorker.get(r.workerId)||[])
+  }));
+}
+
+function workerRiskForecast(workerId,list=records()){
+  const rows=list.filter(r=>r.workerId===workerId)
+    .sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp))
+    .slice(-5);
+  if(rows.length<2)return {status:"データ不足",delta:0,nextCheck:"次回通常測定時"};
+  const scores=rows.map(r=>numericRiskScore(r,rows));
+  const delta=scores.at(-1)-scores[0];
+  const last=scores.at(-1);
+  let status="横ばい",nextCheck="通常の測定間隔";
+  if(delta>=20){status="強い悪化傾向";nextCheck="15～30分以内に対面確認";}
+  else if(delta>=10){status="悪化傾向";nextCheck="30～60分以内に再確認";}
+  else if(delta<=-10){status="改善傾向";nextCheck="通常の測定間隔";}
+  if(last>=80)nextCheck="直ちに管理者確認";
+  else if(last>=60)nextCheck="作業から離して早期確認";
+  return {status,delta,last,nextCheck,scores};
+}
+
+function latestRiskByWorker(list){
+  const map=new Map();
+  list.forEach(r=>{
+    const old=map.get(r.workerId);
+    if(!old||Date.parse(r.timestamp)>Date.parse(old.timestamp))map.set(r.workerId,r);
+  });
+  return [...map.values()].map(r=>{
+    const hist=records().filter(x=>x.workerId===r.workerId);
+    return {...r,riskScore:numericRiskScore(r,hist),forecast:workerRiskForecast(r.workerId,records())};
+  });
+}
+
+function v10ScopeRecords(){
+  return filteredAdminRecords();
+}
+
+function renderV10(){
+  const list=v10ScopeRecords();
+  const latest=latestRiskByWorker(list).sort((a,b)=>b.riskScore-a.riskScore);
+  const scores=latest.map(r=>r.riskScore);
+  const expected=expectedWorkersForFilter();
+  const measured=new Set(list.map(r=>r.workerId));
+  const measuredExpected=expected.filter(w=>measured.has(w.id)).length;
+  const rate=expected.length?Math.round(measuredExpected/expected.length*100):null;
+  const worsening=latest.filter(r=>["悪化傾向","強い悪化傾向"].includes(r.forecast.status));
+  const caution=latest.filter(r=>r.riskScore>=35&&r.riskScore<60);
+  const danger=latest.filter(r=>r.riskScore>=60);
+  const wbgt=list.map(r=>Number(r.context?.wbgt)).filter(Number.isFinite);
+
+  if($("siteAverageRisk"))$("siteAverageRisk").textContent=scores.length?Math.round(avg(scores)):"--";
+  if($("siteMaxRisk"))$("siteMaxRisk").textContent=scores.length?Math.max(...scores):"--";
+  if($("worseningCount"))$("worseningCount").textContent=worsening.length;
+  if($("v10MeasureRate"))$("v10MeasureRate").textContent=rate===null?"--":`${rate}%`;
+
+  const ranking=$("riskRanking");
+  if(ranking){
+    ranking.innerHTML=latest.length?latest.slice(0,10).map((r,i)=>`
+      <div class="risk-row">
+        <div class="risk-rank">${i+1}</div>
+        <div>
+          <strong>${esc(r.workerName||r.workerId)}（${esc(r.workerId)}）</strong>
+          <small>${esc(r.teamName||"班未設定")}／${esc(WORK_TYPE_LABELS[r.workType||"general"]||"一般作業")}</small>
+          <div class="risk-meter ${scoreClass(r.riskScore)}"><div style="width:${r.riskScore}%"></div></div>
+        </div>
+        <div class="risk-score ${scoreClass(r.riskScore)}">${r.riskScore}<small>/100</small></div>
+      </div>`).join(""):"測定データがありません。";
+  }
+
+  const forecastBox=$("forecastList");
+  if(forecastBox){
+    const rows=latest.filter(r=>r.forecast.status!=="データ不足")
+      .sort((a,b)=>b.forecast.delta-a.forecast.delta);
+    forecastBox.innerHTML=rows.length?rows.slice(0,10).map(r=>`
+      <div class="forecast-item">
+        <strong>${esc(r.workerName||r.workerId)}：${esc(r.forecast.status)}</strong>
+        <span>スコア変化 ${r.forecast.delta>=0?"+":""}${r.forecast.delta}／${esc(r.forecast.nextCheck)}</span>
+      </div>`).join(""):"測定履歴が不足しています。";
+  }
+
+  if($("monitorSite"))$("monitorSite").textContent=$("adminSite")?.value||"全現場";
+  if($("monitorWorkers"))$("monitorWorkers").textContent=`${latest.length}人`;
+  if($("monitorCaution"))$("monitorCaution").textContent=`${caution.length}人`;
+  if($("monitorDanger"))$("monitorDanger").textContent=`${danger.length}人`;
+  if($("monitorWbgt"))$("monitorWbgt").textContent=wbgt.length?`${avg(wbgt).toFixed(1)}`:"--";
+  if($("monitorRate"))$("monitorRate").textContent=rate===null?"--":`${rate}%`;
+
+  const board=$("monitorBoard");
+  if(board)board.dataset.level=danger.length?"danger":caution.length?"caution":"normal";
+}
+
+function toggleMonitorMode(){
+  const active=document.body.classList.toggle("monitor-mode");
+  const btn=$("openMonitorMode");
+  if(btn)btn.textContent=active?"通常表示へ戻る":"大型モニター表示";
+  if(active)window.scrollTo({top:0,behavior:"smooth"});
 }
 

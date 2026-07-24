@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f172a">
   <title>現場 顔動画コンディションチェック</title>
-  <link rel="manifest" href="manifest.webmanifest?v=95">
-  <link rel="stylesheet" href="styles.css?v=95">
+  <link rel="manifest" href="manifest.webmanifest?v=100">
+  <link rel="stylesheet" href="styles.css?v=100">
 </head>
 <body>
 <header>
@@ -38,6 +38,18 @@
     <label>作業班
       <input id="teamName" list="teamNameList" autocomplete="off" placeholder="例：機械班">
       <datalist id="teamNameList"></datalist>
+    </label>
+    <label>作業内容
+      <select id="workType">
+        <option value="general">一般作業</option>
+        <option value="light">軽作業・監視</option>
+        <option value="electrical">電気・計装</option>
+        <option value="piping">配管・機械据付</option>
+        <option value="scaffold">足場・高所</option>
+        <option value="civil">土木・掘削</option>
+        <option value="welding">溶接・火気</option>
+        <option value="confined">槽内・閉所</option>
+      </select>
     </label>
     <label>測定区分
       <select id="timing">
@@ -97,6 +109,8 @@
       <div><span>顔追従</span><strong id="trackingStatus">準備前</strong></div>
       <div><span>顔の傾き</span><strong id="poseStatus">未確認</strong></div>
       <div><span>まばたき</span><strong id="blinkStatus">未確認</strong></div>
+      <div><span>危険度スコア</span><strong id="riskScoreStatus">--</strong></div>
+      <div><span>悪化傾向</span><strong id="forecastStatus">未評価</strong></div>
     </div>
 <div class="camera-wrap">
       <video id="video" playsinline muted></video>
@@ -168,7 +182,52 @@
     
     
     
-    <div class="analysis-panel">
+    
+    <div class="v10-panel">
+      <div class="v10-head">
+        <div>
+          <h3>Ver.10 危険度ダッシュボード</h3>
+          <p>保存済みの測定結果、WBGT、作業内容、本人申告から試験的な危険度スコアを算出します。</p>
+        </div>
+        <button id="openMonitorMode" type="button">大型モニター表示</button>
+      </div>
+
+      <div class="v10-summary-grid">
+        <div><span>現場平均スコア</span><strong id="siteAverageRisk">--</strong></div>
+        <div><span>最高スコア</span><strong id="siteMaxRisk">--</strong></div>
+        <div><span>悪化傾向者</span><strong id="worseningCount">0</strong></div>
+        <div><span>測定率</span><strong id="v10MeasureRate">--</strong></div>
+      </div>
+
+      <div class="v10-grid">
+        <section class="v10-card">
+          <h4>危険度ランキング</h4>
+          <div id="riskRanking" class="risk-ranking">測定データがありません。</div>
+        </section>
+        <section class="v10-card">
+          <h4>悪化傾向・次回確認目安</h4>
+          <div id="forecastList" class="forecast-list">測定履歴が不足しています。</div>
+        </section>
+      </div>
+
+      <section class="v10-card">
+        <h4>現場大型モニター</h4>
+        <div id="monitorBoard" class="monitor-board">
+          <div><span>現在の対象現場</span><strong id="monitorSite">全現場</strong></div>
+          <div><span>測定人数</span><strong id="monitorWorkers">0人</strong></div>
+          <div><span>要注意</span><strong id="monitorCaution">0人</strong></div>
+          <div><span>高リスク</span><strong id="monitorDanger">0人</strong></div>
+          <div><span>平均WBGT</span><strong id="monitorWbgt">--</strong></div>
+          <div><span>測定率</span><strong id="monitorRate">--</strong></div>
+        </div>
+      </section>
+
+      <div class="v10-note">
+        危険度スコアと悪化傾向は、医療診断や発症予測ではありません。本人申告、対面確認、WBGT、作業状況を優先してください。
+      </div>
+    </div>
+
+<div class="analysis-panel">
       <div class="analysis-head">
         <div>
           <h3>傾向分析・管理者コメント</h3>
@@ -483,8 +542,8 @@
 </section>
 </main>
 
-<footer>Prototype v9.5（傾向分析・実証評価版）</footer>
-<script type="module" src="face-landmarker.js?v=95"></script>
-<script src="app.js?v=95"></script>
+<footer>Prototype v10.0（危険度スコア・悪化傾向版）</footer>
+<script type="module" src="face-landmarker.js?v=100"></script>
+<script src="app.js?v=100"></script>
 </body>
 </html>
