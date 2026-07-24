@@ -156,3 +156,11 @@ hr{border:0;border-top:1px solid var(--line);margin:22px 0}
   .admin-filters{grid-template-columns:1fr}
   .daily-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+.measure-status-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.tracking-good{color:#166534}
+.tracking-warn{color:#92400e}
+.tracking-bad{color:#991b1b}
+@media(max-width:700px){
+  .measure-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

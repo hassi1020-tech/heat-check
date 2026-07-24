@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 const state = {
   stream:null, measuring:false, timer:null, samples:[], lastGray:null,
-  faceDetector:null, latestResult:null, roi:null, roiFrames:[]
+  faceDetector:null, latestResult:null, roi:null, roiFrames:[], landmark:null, landmarkReady:false
 };
 
 const defaults = {
@@ -45,6 +45,26 @@ async function startCamera(){
       try{ state.faceDetector = new FaceDetector({fastMode:true,maxDetectedFaces:1}); }catch{}
     }
     drawOverlay();
+    if($("trackingStatus"))$("trackingStatus").textContent="AI読込中";
+    try{
+      let wait=0;
+      while(!window.FaceLandmarkTracker && wait<50){
+        await new Promise(r=>setTimeout(r,100)); wait++;
+      }
+      if(window.FaceLandmarkTracker){
+        await window.FaceLandmarkTracker.init();
+        state.landmarkReady=true;
+        $("trackingStatus").textContent="追従可能";
+        $("trackingStatus").className="tracking-good";
+      }else throw new Error("顔追従モジュール未読込");
+    }catch(err){
+      state.landmarkReady=false;
+      if($("trackingStatus")){
+        $("trackingStatus").textContent="固定枠方式";
+        $("trackingStatus").className="tracking-warn";
+      }
+      console.warn("Face Landmarker fallback:",err);
+    }
   }catch(e){
     alert("カメラを開始できません。HTTPS接続またはブラウザのカメラ許可を確認してください。\n"+e.message);
   }
@@ -67,6 +87,44 @@ function drawOverlay(){
   ctx.beginPath();ctx.ellipse(c.width/2,c.height/2,w/2,h/2,0,0,Math.PI*2);ctx.stroke();
 }
 
+
+function drawLandmarkOverlay(track){
+  const c=$("overlay"),v=$("video");
+  if(!c||!v)return;
+  c.width=v.videoWidth||640;c.height=v.videoHeight||480;
+  const ctx=c.getContext("2d");
+  ctx.clearRect(0,0,c.width,c.height);
+
+  if(!track){
+    drawOverlay();
+    return;
+  }
+
+  const mirrorX=n=>(1-n)*c.width;
+  const regionColors=["#38bdf8","#22c55e","#22c55e"];
+  [track.regions.forehead,track.regions.leftCheek,track.regions.rightCheek].forEach((r,i)=>{
+    if(!r)return;
+    const x=mirrorX(r.x+r.w), y=r.y*c.height, w=r.w*c.width, h=r.h*c.height;
+    ctx.strokeStyle=regionColors[i];ctx.lineWidth=3;ctx.setLineDash([7,5]);
+    ctx.strokeRect(x,y,w,h);
+  });
+
+  ctx.setLineDash([]);
+  ctx.fillStyle="rgba(255,255,255,.75)";
+  track.points.filter((_,i)=>i%8===0).forEach(p=>{
+    ctx.beginPath();ctx.arc(mirrorX(p.x),p.y*c.height,1.2,0,Math.PI*2);ctx.fill();
+  });
+}
+
+function landmarkRectPixels(rect, width, height){
+  if(!rect)return null;
+  const x=Math.max(0,Math.floor((1-rect.x-rect.w)*width));
+  const y=Math.max(0,Math.floor(rect.y*height));
+  const w=Math.max(2,Math.min(width-x,Math.floor(rect.w*width)));
+  const h=Math.max(2,Math.min(height-y,Math.floor(rect.h*height)));
+  return {x,y,w,h};
+}
+
 function validateFields(){
   return $("workerId").value.trim() && $("workerName").value.trim() && $("siteName").value.trim();
 }
@@ -85,7 +143,8 @@ async function startMeasure(){
     const warmup=Number(cfg.warmupSec)||5;
     const duration=15;
 
-    state.measuring=true; state.samples=[]; state.latestResult=null; state.lastGray=null;
+    state.measuring=true; state.samples=[]; state.latestResult=null; state.lastGray=null; state.landmark=null;
+    window.FaceLandmarkTracker?.reset?.();
     $("resultCard").classList.add("hidden");
     $("startMeasure").disabled=true; $("stopCamera").disabled=true;
     $("countdown").textContent="準備 "+warmup;
@@ -124,10 +183,30 @@ async function startMeasure(){
           ?"準備 "+Math.max(0,Math.ceil(warmup-elapsed))
           :Math.max(0,duration-measured).toFixed(1);
 
+        ctx.save();
+        ctx.translate(180,0);ctx.scale(-1,1);
         ctx.drawImage(video,0,0,180,135);
-        const forehead=roiStats(66,18,48,24);
-        const left=roiStats(43,59,36,28);
-        const right=roiStats(101,59,36,28);
+        ctx.restore();
+
+        let track=null;
+        if(state.landmarkReady&&window.FaceLandmarkTracker){
+          try{ track=window.FaceLandmarkTracker.detect(video,now)||state.landmark; }catch{}
+        }
+        if(track)state.landmark=track;
+        drawLandmarkOverlay(track);
+
+        let fr={x:66,y:18,w:48,h:24};
+        let lr={x:43,y:59,w:36,h:28};
+        let rr={x:101,y:59,w:36,h:28};
+        if(track){
+          fr=landmarkRectPixels(track.regions.forehead,180,135)||fr;
+          lr=landmarkRectPixels(track.regions.leftCheek,180,135)||lr;
+          rr=landmarkRectPixels(track.regions.rightCheek,180,135)||rr;
+        }
+
+        const forehead=roiStats(fr.x,fr.y,fr.w,fr.h);
+        const left=roiStats(lr.x,lr.y,lr.w,lr.h);
+        const right=roiStats(rr.x,rr.y,rr.w,rr.h);
 
         const merged=new Uint8Array(forehead.gray.length+left.gray.length+right.gray.length);
         merged.set(forehead.gray,0); merged.set(left.gray,forehead.gray.length);
@@ -141,7 +220,8 @@ async function startMeasure(){
         prevGray=merged;
 
         if(elapsed>=warmup&&now-lastSampleAt>=100){
-          state.samples.push({t:now/1000,regions:[forehead,left,right],motion});
+          state.samples.push({t:now/1000,regions:[forehead,left,right],motion,
+            pose:track?.pose||null,blink:track?.blink||null,headMovement:track?.headMovement||0,tracked:!!track});
           lastSampleAt=now;
           if(state.samples.length>10){
             const q=analyzeFace(state.samples);
@@ -150,6 +230,9 @@ async function startMeasure(){
             $("bpmLive").textContent=q.colorChangeLabel;
             if($("facePosition"))$("facePosition").textContent=q.positionLabel;
             if($("lightingStatus"))$("lightingStatus").textContent=q.lightingLabel;
+            if($("trackingStatus"))$("trackingStatus").textContent=q.trackingRate>=70?"追従良好":q.trackingRate>=35?"追従注意":"固定枠方式";
+            if($("poseStatus"))$("poseStatus").textContent=q.poseLabel;
+            if($("blinkStatus"))$("blinkStatus").textContent=q.blinkLabel;
           }else $("quality").textContent="取得中 "+state.samples.length;
         }
 
@@ -247,13 +330,23 @@ function analyzeFace(samples){
   const asymmetry=Math.abs(leftNorm-rightNorm)/Math.max(.01,(leftNorm+rightNorm)/2)*100;
 
   const avgMotion=avg(samples.map(s=>s.motion));
+  const tracked=samples.filter(s=>s.tracked&&s.pose);
+  const trackingRate=tracked.length/Math.max(1,samples.length)*100;
+  const avgPosition=tracked.length?avg(tracked.map(s=>s.pose.positionScore)):0;
+  const avgRoll=tracked.length?avg(tracked.map(s=>Math.abs(s.pose.rollDeg))):0;
+  const avgYaw=tracked.length?avg(tracked.map(s=>Math.abs(s.pose.yawIndex))):0;
+  const blinkCount=tracked.length?Math.max(...tracked.map(s=>s.blink?.count10s||0)):0;
+  const avgHeadMovement=tracked.length?avg(tracked.map(s=>s.headMovement||0)):0;
+  const poseLabel=!tracked.length?"固定枠":avgPosition>=75?"正面良好":avgPosition>=50?"向き注意":"正面を向く";
+  const blinkLabel=!tracked.length?"未取得":blinkCount===0?"未検出":`${blinkCount}回`;
   const lumValues=samples.flatMap(s=>s.regions.map(r=>r.lum));
   const minLum=Math.min(...lumValues), maxLum=Math.max(...lumValues), avgLum=avg(lumValues);
 
   // 固定ROIの3領域に十分な明るさがあるかを顔位置の簡易指標に使用
   const foreheadLum=regionMean(samples,0,"lum");
   const cheekLum=avg([leftLum,rightLum]);
-  const positionScore=Math.max(0,100-Math.abs(foreheadLum-cheekLum)*1.2-Math.min(50,avgMotion*3));
+  const fixedPositionScore=Math.max(0,100-Math.abs(foreheadLum-cheekLum)*1.2-Math.min(50,avgMotion*3));
+  const positionScore=tracked.length?avgPosition:fixedPositionScore;
 
   let quality=100;
   if(avgLum<45||avgLum>220)quality-=40;
@@ -262,6 +355,8 @@ function analyzeFace(samples){
   else if(lightingBias>22)quality-=12;
   quality-=Math.min(40,avgMotion*3.2);
   if(positionScore<45)quality-=20;
+  if(state.landmarkReady&&trackingRate<35)quality-=20;
+  if(avgRoll>15||avgYaw>.18)quality-=15;
   quality=Math.max(0,Math.min(100,quality));
 
   const colorMagnitude=Math.abs(brightnessChange)+Math.abs(rednessChange)+Math.abs(blueChange);
@@ -278,7 +373,8 @@ function analyzeFace(samples){
   return {quality,qualityLabel,avgMotion,motionLabel,colorChange:colorMagnitude,
     colorChangeLabel,rednessChange,brightnessChange,blueChange,asymmetry,
     asymmetryLabel,paleScore,redScore,avgLum,lightingBias,lightingLabel,
-    positionScore,positionLabel};
+    positionScore,positionLabel,trackingRate,poseLabel,blinkLabel,blinkCount,
+    avgRoll,avgYaw,avgHeadMovement};
 }
 
 function workerBaseline(workerId){
@@ -377,6 +473,9 @@ function showResult(r){
   $("resultContext").textContent=`${wbgtText}・症状${symptomN}件`;
   if($("facePosition"))$("facePosition").textContent=r.positionLabel;
   if($("lightingStatus"))$("lightingStatus").textContent=r.lightingLabel;
+  if($("trackingStatus"))$("trackingStatus").textContent=(r.trackingRate||0)>=70?"追従良好":(r.trackingRate||0)>=35?"追従注意":"固定枠方式";
+  if($("poseStatus"))$("poseStatus").textContent=r.poseLabel||"未確認";
+  if($("blinkStatus"))$("blinkStatus").textContent=r.blinkLabel||"未確認";
   if($("baselineStatus")){
     if(r.baseline){
       const d=Math.abs(r.colorChange-r.baseline.colorChange);
@@ -808,7 +907,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v9.2プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v9.3プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
