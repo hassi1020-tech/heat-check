@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
-  <title>現場 AIコンディションチェック Ver.12.0 第4段階 Firebase同期版</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1200s4fb">
-  <link rel="stylesheet" href="styles.css?v=1200s4fb">
+  <title>現場 AIコンディションチェック Ver.13.0 Firebase完全同期版</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1300final">
+  <link rel="stylesheet" href="styles.css?v=1300final">
 </head>
 <body>
 <header>
@@ -14,7 +14,7 @@
     <h1>現場 AIコンディションチェック</h1>
     <p>非接触スクリーニング／体調変化の補助検知</p>
   </div>
-  <span class="version">Ver.12.0 第4段階 Firebase同期版</span>
+  <span class="version">Ver.13.0 Firebase完全同期版</span>
 </header>
 
 <nav>
@@ -162,7 +162,7 @@
     <label>通常値成立に必要な最低記録数<input id="baselineMin" type="number" min="3" max="10" value="5"></label>
     <button id="saveSettings" class="primary">設定保存</button>
     <button id="exportJson">JSONバックアップ</button>
-    <button id="cloudUploadLocal" type="button">この端末のデータをFirebaseへ登録</button>
+    <button id="cloudUploadLocal" type="button">既存データをFirebaseへ初回登録</button>
     <label class="file-button">JSON復元<input id="importJson" type="file" accept=".json"></label>
     <button id="clearRecords" class="danger">履歴削除</button>
     <p class="note">個人ベースラインは、本人申告が「異常なし」で総合判定が「通常」の記録から作成します。</p>
@@ -170,11 +170,11 @@
 </section>
 </main>
 
-<footer>Prototype Ver.12.0 第4段階 Firebase同期版／口元AIは使用しません。</footer>
-<script type="module" src="face-landmarker.js?v=1200s4fb"></script>
-<script src="app.js?v=1200s4fb"></script>
-<script src="device-mode.js?v=1200s4fb"></script>
-<script src="firebase-config.js?v=1200s4fb"></script>
-<script type="module" src="firebase-cloud.js?v=1200s4fb"></script>
+<footer>Prototype Ver.13.0 Firebase完全同期版／口元AIは使用しません。</footer>
+<script type="module" src="face-landmarker.js?v=1300final"></script>
+<script src="app.js?v=1300final"></script>
+<script src="device-mode.js?v=1300final"></script>
+<script src="firebase-config.js?v=1300final"></script>
+<script type="module" src="firebase-cloud.js?v=1300final"></script>
 </body>
 </html>

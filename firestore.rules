@@ -5,21 +5,32 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function ownsPersonalWorkspace(workspaceId) {
+    function personalWorkspace(workspaceId) {
       return signedIn() && workspaceId == request.auth.uid;
     }
 
     function sharedWorkspaceMember(workspaceId) {
-      return signedIn() &&
-        exists(/databases/$(database)/documents/heatCheckWorkspaces/$(workspaceId)/members/$(request.auth.uid));
+      return signedIn()
+        && exists(/databases/$(database)/documents/heatCheckWorkspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+
+    function canUseWorkspace(workspaceId) {
+      return personalWorkspace(workspaceId) || sharedWorkspaceMember(workspaceId);
     }
 
     match /heatCheckWorkspaces/{workspaceId} {
-      allow read, write: if ownsPersonalWorkspace(workspaceId) || sharedWorkspaceMember(workspaceId);
+      allow read, create, update: if canUseWorkspace(workspaceId);
+      allow delete: if false;
 
       match /{document=**} {
-        allow read, write: if ownsPersonalWorkspace(workspaceId) || sharedWorkspaceMember(workspaceId);
+        allow read, create, update: if canUseWorkspace(workspaceId);
+        allow delete: if false;
       }
+    }
+
+    // Existing organizations data is not changed by this application.
+    match /organizations/{document=**} {
+      allow read, write: if false;
     }
   }
 }
