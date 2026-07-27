@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <title>現場 AIコンディションチェック Ver.12.0</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1200s1">
-  <link rel="stylesheet" href="styles.css?v=1200s1">
+  <link rel="manifest" href="manifest.webmanifest?v=1200s2">
+  <link rel="stylesheet" href="styles.css?v=1200s2">
 </head>
 <body>
 <header class="app-header">
@@ -15,7 +15,7 @@
     <p>非接触スクリーニング／顔状態チェック</p>
   </div>
   <div class="header-right">
-      <span class="version">Ver.12.0 第1段階 顔色・発汗解析版</span>
+      <span class="version">Ver.12.0 第2段階 顔色・発汗・表情解析版</span>
       <div class="device-mode-switch" aria-label="端末モード">
         <button id="modeKioskButton" type="button">撮影端末</button>
         <button id="modeAdminButton" type="button">管理PC</button>
@@ -100,7 +100,7 @@
         <button id="startMeasure" class="accent" disabled>撮影開始</button>
         <button id="stopCamera" disabled>カメラ停止</button>
       </div>
-      <p class="note">顔画像・動画は保存しません。第1段階では、額・頬・鼻・口元の色特徴と皮膚光沢の数値のみ記録します。</p>
+      <p class="note">顔画像・動画は保存しません。顔画像・動画は保存せず、色特徴・皮膚光沢・Face Landmarkerの表情係数のみ記録します。</p>
     </article>
   </div>
 
@@ -127,7 +127,7 @@
       <section class="simple-result-section face-ai-section">
         <div class="face-ai-heading">
           <div>
-            <h3>AI顔解析（第1段階）</h3>
+            <h3>AI顔解析（第2段階）</h3>
             <p id="faceAiStageNote" class="face-ai-note"></p>
           </div>
           <div class="face-ai-overall">
@@ -146,8 +146,10 @@
             <strong id="faceAiSweat">—</strong>
             <small id="faceAiSweatLabel">未解析</small>
           </article>
-          <article class="face-ai-card pending">
-            <span>③ 表情解析</span><strong>次段階</strong><small>未実装</small>
+          <article class="face-ai-card">
+            <span>③ 表情解析</span>
+            <strong id="faceAiExpression">—</strong>
+            <small id="faceAiExpressionLabel">未解析</small>
           </article>
           <article class="face-ai-card pending">
             <span>④ 目の状態</span><strong>次段階</strong><small>未実装</small>
@@ -449,10 +451,11 @@
 </main>
 
 <footer>
-  Prototype Ver.12.0 第1段階 顔色・発汗解析版／非接触スクリーニング。医療診断には使用できません。
+  Prototype Ver.12.0 第2段階 顔色・発汗・表情解析版／非接触スクリーニング。医療診断には使用できません。
 </footer>
-<script src="app.js?v=1200s1"></script>
-<script type="module" src="firebase-cloud.js?v=1200s1"></script>
-<script src="device-mode.js?v=1200s1"></script>
+<script type="module" src="face-landmarker.js?v=1200s2"></script>
+<script src="app.js?v=1200s2"></script>
+<script type="module" src="firebase-cloud.js?v=1200s2"></script>
+<script src="device-mode.js?v=1200s2"></script>
 </body>
 </html>

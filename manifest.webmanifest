@@ -1,6 +1,6 @@
 {
-  "name": "現場 AIコンディションチェック Ver.12.0 第1段階",
-  "short_name": "AIチェックV12",
+  "name": "現場 AIコンディションチェック Ver.12.0 第2段階",
+  "short_name": "AIチェックV12-2",
   "start_url": "./?mode=kiosk&v=1103ka1",
   "display": "standalone",
   "background_color": "#f3f7f7",

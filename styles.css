@@ -584,3 +584,14 @@
 .face-ai-card.pending{background:#f4f6f6;opacity:.72;border-style:dashed}
 @media(max-width:850px){.face-ai-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:480px){.face-ai-heading{align-items:flex-start}.face-ai-grid{grid-template-columns:1fr 1fr}.face-ai-card:last-child{grid-column:1/-1}}
+
+
+/* Ver.12.0 第2段階：MediaPipe表情解析 */
+.face-ai-card:not(.pending):nth-child(3){
+  border-color:#bfd7ef;
+  background:#f7fbff;
+}
+.face-ai-model-state{
+  font-size:.8rem;
+  color:#60777b;
+}

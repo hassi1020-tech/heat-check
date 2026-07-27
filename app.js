@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id);
 let stream=null, measuring=false, guideTimer=null;
 
 function defaultDB(){
-  return {version:"12.0-stage1",sites:[],teams:[],workers:[],records:[],settings:{duration:10,wbgtYellow:28,wbgtOrange:31},updatedAt:new Date().toISOString()};
+  return {version:"12.0-stage2",sites:[],teams:[],workers:[],records:[],settings:{duration:10,wbgtYellow:28,wbgtOrange:31},updatedAt:new Date().toISOString()};
 }
 function loadDB(){
   try{
@@ -215,6 +215,17 @@ function evaluate(worker,frames){
   const foreheadGloss=avg("foreheadGloss");
   const noseGloss=avg("noseGloss");
   const sweatIndex=avg("sweatIndex");
+  const expressionFrames=frames.filter(x=>x.expressionAvailable);
+  const expressionAvg=k=>expressionFrames.length
+    ? expressionFrames.reduce((s,x)=>s+(Number(x[k])||0),0)/expressionFrames.length
+    : 0;
+  const expressionRisk=Math.round(expressionAvg("expressionRisk"));
+  const expressionConfidence=Math.round(expressionAvg("expressionConfidence"));
+  const browTension=expressionAvg("browTension");
+  const eyeTension=expressionAvg("eyeTension");
+  const mouthCornerDown=expressionAvg("mouthCornerDown");
+  const jawActivity=expressionAvg("jawActivity");
+  const expressionAvailable=expressionFrames.length>=Math.max(2,Math.floor(frames.length*0.35));
   const colorVariation=Math.sqrt(frames.reduce((s,x)=>s+(x.cheekRedness-avg("cheekRedness"))**2,0)/frames.length);
 
   // 第1段階：顔色・発汗の観察スコア（医療診断ではない）
@@ -226,7 +237,11 @@ function evaluate(worker,frames){
     Math.min(100,colorVariation*6)*0.10
   );
   const sweatRisk=Math.round(Math.min(100,Math.max(0,sweatIndex)));
-  const faceAiRisk=Math.round(faceColorRisk*0.75+sweatRisk*0.25);
+  const faceAiRisk=Math.round(
+    faceColorRisk*0.55+
+    sweatRisk*0.15+
+    (expressionAvailable?expressionRisk:faceColorRisk)*0.30
+  );
   const wbgt=Number($("measureWbgt").value)||null,abnormal=$("conditionAbnormal").value==="yes",hydration=$("hydration").value;
   let level="green",reasons=[],actions=[];
   const raise=x=>{if(LEVELS[x].rank>LEVELS[level].rank)level=x;};
@@ -245,6 +260,14 @@ function evaluate(worker,frames){
     reasons.push("顔色に軽度の変化傾向");
   }
   if(sweatRisk>=75)reasons.push("額・鼻周辺の光沢が増加傾向");
+  if(expressionAvailable && expressionRisk>=70){
+    reasons.push("眉・目・口元に大きな表情変化傾向");
+    if(faceColorRisk>=55 || sweatRisk>=65)raise("yellow");
+  }else if(expressionAvailable && expressionRisk>=45){
+    reasons.push("表情に軽度の変化傾向");
+  }else if(!expressionAvailable){
+    reasons.push("表情AIは未取得または顔検出不足");
+  }
   if(!reasons.length)reasons.push("重大な変化は検出されませんでした");
   actions=level==="red"?["直ちに作業を中止する","涼しい場所で管理者が本人を確認する","必要に応じて救急要請・医療機関へ連絡する"]:
     level==="orange"?["作業を中断して休憩する","水分・塩分を補給する","管理者が本人を確認し再測定する"]:
@@ -271,6 +294,12 @@ function evaluate(worker,frames){
       overallRisk:faceAiRisk,
       colorRisk:faceColorRisk,
       sweatRisk,
+      expressionRisk:expressionAvailable?expressionRisk:null,
+      expressionAvailable,
+      expressionLabel:!expressionAvailable?"解析できません":
+        expressionRisk>=70?"大きな表情変化":
+        expressionRisk>=45?"軽度の表情変化":"通常範囲",
+      expressionConfidence:expressionAvailable?expressionConfidence:0,
       colorLabel:faceColorRisk>=72?"大きな変化":faceColorRisk>=48?"軽度変化":"通常範囲",
       sweatLabel:sweatRisk>=75?"増加傾向":sweatRisk>=45?"やや増加":"判定上大きな変化なし",
       confidence:Math.round(Math.max(20,Math.min(99,qualityScore*0.85+15))),
@@ -281,9 +310,13 @@ function evaluate(worker,frames){
         mouthRedness:+mouthRedness.toFixed(1),
         pallor:+pallor.toFixed(1),
         foreheadGloss:+foreheadGloss.toFixed(2),
-        noseGloss:+noseGloss.toFixed(2)
+        noseGloss:+noseGloss.toFixed(2),
+        browTension:+browTension.toFixed(1),
+        eyeTension:+eyeTension.toFixed(1),
+        mouthCornerDown:+mouthCornerDown.toFixed(1),
+        jawActivity:+jawActivity.toFixed(1)
       },
-      disclaimer:"顔色・皮膚光沢の変化傾向であり、熱中症・脱水・発汗量の医学的診断ではありません。"
+      disclaimer:"顔色・皮膚光沢・表情係数の変化傾向であり、熱中症・脱水・疲労・感情の医学的診断ではありません。"
     }
   };
 }
@@ -296,7 +329,19 @@ async function startMeasure(){
   const frames=[],sec=Math.max(5,Math.min(30,db.settings.duration||10)),start=Date.now();
   try{
     while(Date.now()-start<sec*1000){
-      frames.push(sampleFrame());
+      const frame=sampleFrame();
+      if(window.FaceExpressionAI?.analyze){
+        const expression=await window.FaceExpressionAI.analyze($("camera"));
+        frame.expression=expression;
+        frame.expressionRisk=expression?.available ? Number(expression.expressionRisk)||0 : 0;
+        frame.expressionAvailable=!!expression?.available;
+        frame.expressionConfidence=Number(expression?.confidence)||0;
+        frame.browTension=Number(expression?.features?.browTension)||0;
+        frame.eyeTension=Number(expression?.features?.eyeTension)||0;
+        frame.mouthCornerDown=Number(expression?.features?.mouthCornerDown)||0;
+        frame.jawActivity=Number(expression?.features?.jawActivity)||0;
+      }
+      frames.push(frame);
       const left=Math.ceil(sec-(Date.now()-start)/1000);
       $("cameraMessage").textContent=`測定中…残り約${Math.max(0,left)}秒`;
       await new Promise(r=>setTimeout(r,400));
@@ -339,8 +384,12 @@ function showResult(r){
   if($("faceAiColorLabel")) $("faceAiColorLabel").textContent=faceAI.colorLabel||"未解析";
   if($("faceAiSweat")) $("faceAiSweat").textContent=`${Math.max(0,100-(faceAI.sweatRisk??0))}点`;
   if($("faceAiSweatLabel")) $("faceAiSweatLabel").textContent=faceAI.sweatLabel||"未解析";
+  if($("faceAiExpression")) $("faceAiExpression").textContent=
+    faceAI.expressionAvailable ? `${Math.max(0,100-(faceAI.expressionRisk??0))}点` : "再測定";
+  if($("faceAiExpressionLabel")) $("faceAiExpressionLabel").textContent=
+    faceAI.expressionLabel||"未解析";
   if($("faceAiStageNote")) $("faceAiStageNote").textContent=
-    "第1段階では顔色と皮膚光沢を解析します。表情・目・口元は次段階で追加します。";
+    "第2段階では顔色・皮膚光沢に加え、MediaPipeの表情係数を解析します。目・口元の時系列解析は次段階です。";
 
   $("resultReasons").innerHTML = r.reasons.slice(0,5)
     .map(reason => `<li><span class="check-mark">✓</span><span>${esc(reason)}</span></li>`)
@@ -370,7 +419,13 @@ function showResult(r){
     ["左頬の赤み指数", r.faceAI?.regions?.leftCheekRedness ?? "—"],
     ["右頬の赤み指数", r.faceAI?.regions?.rightCheekRedness ?? "—"],
     ["額の光沢率", r.faceAI?.regions?.foreheadGloss ?? "—"],
-    ["鼻の光沢率", r.faceAI?.regions?.noseGloss ?? "—"]
+    ["鼻の光沢率", r.faceAI?.regions?.noseGloss ?? "—"],
+    ["表情スコア", r.faceAI?.expressionAvailable ? `${Math.max(0,100-(r.faceAI.expressionRisk??0))}点` : "未取得"],
+    ["表情AI信頼度", r.faceAI?.expressionAvailable ? `${r.faceAI.expressionConfidence??0}%` : "—"],
+    ["眉の緊張指数", r.faceAI?.regions?.browTension ?? "—"],
+    ["目周辺の緊張指数", r.faceAI?.regions?.eyeTension ?? "—"],
+    ["口角低下指数", r.faceAI?.regions?.mouthCornerDown ?? "—"],
+    ["顎活動指数", r.faceAI?.regions?.jawActivity ?? "—"]
   ];
 
   $("resultMetrics").innerHTML = detailItems.map(([name,value]) => `
@@ -440,7 +495,7 @@ function drawChart(rows){
 
 $("saveSettings").onclick=()=>{const d=loadDB();d.settings.duration=Math.max(5,Math.min(30,Number($("settingDuration").value)||10));d.settings.wbgtYellow=Number($("settingWbgtYellow").value)||28;d.settings.wbgtOrange=Number($("settingWbgtOrange").value)||31;saveDB(d);setStatus("settingsStatus","設定を保存しました。","success");};
 $("exportJson").onclick=()=>download("heat-check-v11-backup.json",JSON.stringify(loadDB(),null,2),"application/json");
-$("exportCsv").onclick=()=>{const rows=loadDB().records,head=["日時","作業員ID","氏名","現場","作業班","判定","WBGT","体調異常","水分補給","明るさ","左右差","動き","顔色差","顔AI総合点","顔色点","発汗傾向点","実証評価","所見"];const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;const csv="\ufeff"+[head,...rows.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level].label,r.wbgt,r.abnormal?"あり":"なし",r.hydration,r.metrics.brightness,r.metrics.asymmetry,r.metrics.motion,r.metrics.redness,Math.max(0,100-(r.faceAI?.overallRisk??0)),Math.max(0,100-(r.faceAI?.colorRisk??0)),Math.max(0,100-(r.faceAI?.sweatRisk??0)),r.validation?.result||"",r.validation?.comment||""])].map(a=>a.map(q).join(",")).join("\n");download("heat-check-v11-records.csv",csv,"text/csv");};
+$("exportCsv").onclick=()=>{const rows=loadDB().records,head=["日時","作業員ID","氏名","現場","作業班","判定","WBGT","体調異常","水分補給","明るさ","左右差","動き","顔色差","顔AI総合点","顔色点","発汗傾向点","表情点","表情AI信頼度","実証評価","所見"];const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;const csv="\ufeff"+[head,...rows.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level].label,r.wbgt,r.abnormal?"あり":"なし",r.hydration,r.metrics.brightness,r.metrics.asymmetry,r.metrics.motion,r.metrics.redness,Math.max(0,100-(r.faceAI?.overallRisk??0)),Math.max(0,100-(r.faceAI?.colorRisk??0)),Math.max(0,100-(r.faceAI?.sweatRisk??0)),r.faceAI?.expressionAvailable?Math.max(0,100-(r.faceAI?.expressionRisk??0)):"",r.faceAI?.expressionConfidence??"",r.validation?.result||"",r.validation?.comment||""])].map(a=>a.map(q).join(",")).join("\n");download("heat-check-v11-records.csv",csv,"text/csv");};
 $("importJson").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d.records)||!Array.isArray(d.workers))throw new Error();saveDB({...defaultDB(),...d});init();alert("復元しました。");}catch{alert("正しいバックアップファイルではありません。");}};rd.readAsText(f);e.target.value="";};
 $("clearRecords").onclick=()=>{if(!confirm("測定記録と実証評価をすべて削除しますか？"))return;const d=loadDB();d.records=[];saveDB(d);renderDashboard();renderValidation();renderWorkerCard();};
 
@@ -461,7 +516,7 @@ window.HeatCheckApp={
   }
 };
 init();
-console.info("現場 AIコンディションチェック Ver.12.0 第1段階 顔色・発汗解析 読込完了");
+console.info("現場 AIコンディションチェック Ver.12.0 第2段階 顔色・発汗・表情解析 読込完了");
 
 
 /* =========================================================
