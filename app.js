@@ -1508,7 +1508,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.4.5保存キー初期化修正版読込済み。作業員を選択してください。";
+$("guide").textContent="v10.4.6現場・作業班マスタ修正版読込済み。作業員を選択してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -2261,7 +2261,7 @@ try{
   fillWorkerFromMaster();
   syncSimpleCondition();
   window.heatCheckAppReady=true;
-  console.info("v10.4.5 保存キー初期化修正版 読込完了");
+  console.info("v10.4.6 現場・作業班マスタ修正版 読込完了");
 }catch(err){
   console.error("初期化エラー:",err);
   const summary=document.getElementById("selectedWorkerSummary");

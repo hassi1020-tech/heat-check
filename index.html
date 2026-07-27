@@ -6,8 +6,8 @@
 <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
 <meta content="#0f172a" name="theme-color"/>
 <title>現場 顔動画コンディションチェック</title>
-<link href="manifest.webmanifest?v=1045" rel="manifest"/>
-<link href="styles.css?v=1045" rel="stylesheet"/>
+<link href="manifest.webmanifest?v=1046" rel="manifest"/>
+<link href="styles.css?v=1046" rel="stylesheet"/>
 </head>
 <body>
 <header>
@@ -346,6 +346,7 @@
 <input id="masterSiteName" placeholder="現場名"/>
 <button id="addSiteMaster" type="button">追加</button>
 </div>
+<div id="siteRegisterStatus" class="master-register-status" role="status" aria-live="polite"></div>
 <div class="master-list" id="siteMasterList"></div>
 </section>
 <section class="master-section">
@@ -354,6 +355,7 @@
 <input id="masterTeamName" placeholder="作業班名"/>
 <button id="addTeamMaster" type="button">追加</button>
 </div>
+<div id="teamRegisterStatus" class="master-register-status" role="status" aria-live="polite"></div>
 <div class="master-list" id="teamMasterList"></div>
 </section>
 <section class="master-section worker-master-section">
@@ -538,14 +540,14 @@ A003" rows="5"></textarea>
 </div>
 </section>
 </main>
-<footer>Prototype v10.4.5（保存キー初期化修正版）</footer>
-<script src="face-landmarker.js?v=1045" type="module"></script>
-<script src="app.js?v=1045"></script>
+<footer>Prototype v10.4.6（現場・作業班マスタ修正版）</footer>
+<script src="face-landmarker.js?v=1046" type="module"></script>
+<script src="app.js?v=1046"></script>
 
 <script>
 (function(){
   "use strict";
-  const VERSION="10.4.5";
+  const VERSION="10.4.6";
   const MASTER_KEY="heatCheckMasterV94";
 
   function byId(id){return document.getElementById(id);}
@@ -637,6 +639,173 @@ A003" rows="5"></textarea>
       });
     }
   }
+
+  function uniqueClean(values){
+    const seen=new Set();
+    return values.map(function(v){return String(v||"").trim();})
+      .filter(function(v){
+        if(!v||seen.has(v))return false;
+        seen.add(v);
+        return true;
+      });
+  }
+
+  function renderSiteTeamDirect(){
+    const master=loadMasterDirect();
+    master.sites=uniqueClean(master.sites||[]);
+    master.teams=uniqueClean(master.teams||[]);
+
+    const siteList=byId("siteMasterList");
+    if(siteList){
+      siteList.innerHTML=master.sites.length
+        ? master.sites.map(function(name,index){
+            return '<div class="master-item"><span>'+escapeHtml(name)+'</span>'+
+              '<button type="button" data-direct-delete-site="'+index+'">削除</button></div>';
+          }).join("")
+        : "現場は未登録です。";
+      siteList.querySelectorAll("[data-direct-delete-site]").forEach(function(button){
+        button.addEventListener("click",function(event){
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const index=Number(button.getAttribute("data-direct-delete-site"));
+          const m=loadMasterDirect();
+          m.sites.splice(index,1);
+          saveMasterDirect(m);
+          renderSiteTeamDirect();
+          renderWorkerSelectDirect(byId("workerId")?.value||"");
+        },true);
+      });
+    }
+
+    const teamList=byId("teamMasterList");
+    if(teamList){
+      teamList.innerHTML=master.teams.length
+        ? master.teams.map(function(name,index){
+            return '<div class="master-item"><span>'+escapeHtml(name)+'</span>'+
+              '<button type="button" data-direct-delete-team="'+index+'">削除</button></div>';
+          }).join("")
+        : "作業班は未登録です。";
+      teamList.querySelectorAll("[data-direct-delete-team]").forEach(function(button){
+        button.addEventListener("click",function(event){
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const index=Number(button.getAttribute("data-direct-delete-team"));
+          const m=loadMasterDirect();
+          m.teams.splice(index,1);
+          saveMasterDirect(m);
+          renderSiteTeamDirect();
+          renderWorkerSelectDirect(byId("workerId")?.value||"");
+        },true);
+      });
+    }
+
+    const siteSelect=byId("masterWorkerSite");
+    if(siteSelect){
+      const current=siteSelect.value;
+      siteSelect.innerHTML='<option value="">所属現場</option>'+
+        master.sites.map(function(name){
+          return '<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>';
+        }).join("");
+      if(master.sites.includes(current))siteSelect.value=current;
+    }
+
+    const teamSelect=byId("masterWorkerTeam");
+    if(teamSelect){
+      const current=teamSelect.value;
+      teamSelect.innerHTML='<option value="">作業班</option>'+
+        master.teams.map(function(name){
+          return '<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>';
+        }).join("");
+      if(master.teams.includes(current))teamSelect.value=current;
+    }
+
+    const adminSite=byId("adminSite");
+    if(adminSite){
+      const current=adminSite.value;
+      adminSite.innerHTML='<option value="">すべての現場</option>'+
+        master.sites.map(function(name){
+          return '<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>';
+        }).join("");
+      if(master.sites.includes(current))adminSite.value=current;
+    }
+
+    const adminTeam=byId("adminTeam");
+    if(adminTeam){
+      const current=adminTeam.value;
+      adminTeam.innerHTML='<option value="">すべての班</option>'+
+        master.teams.map(function(name){
+          return '<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>';
+        }).join("");
+      if(master.teams.includes(current))adminTeam.value=current;
+    }
+  }
+
+  function directAddSite(event){
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const input=byId("masterSiteName");
+    const value=String(input?.value||"").trim();
+    const status=byId("siteRegisterStatus");
+    if(!value){
+      if(status){
+        status.className="master-register-status error";
+        status.textContent="現場名を入力してください。";
+      }
+      input?.focus();
+      return;
+    }
+    try{
+      const master=loadMasterDirect();
+      master.sites=uniqueClean([].concat(master.sites||[],[value]));
+      saveMasterDirect(master);
+      if(input)input.value="";
+      renderSiteTeamDirect();
+      if(status){
+        status.className="master-register-status success";
+        status.textContent="追加完了："+value;
+      }
+    }catch(error){
+      console.error("現場マスタ追加エラー",error);
+      if(status){
+        status.className="master-register-status error";
+        status.textContent="現場マスタの追加に失敗しました。";
+      }
+    }
+  }
+
+  function directAddTeam(event){
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const input=byId("masterTeamName");
+    const value=String(input?.value||"").trim();
+    const status=byId("teamRegisterStatus");
+    if(!value){
+      if(status){
+        status.className="master-register-status error";
+        status.textContent="作業班名を入力してください。";
+      }
+      input?.focus();
+      return;
+    }
+    try{
+      const master=loadMasterDirect();
+      master.teams=uniqueClean([].concat(master.teams||[],[value]));
+      saveMasterDirect(master);
+      if(input)input.value="";
+      renderSiteTeamDirect();
+      if(status){
+        status.className="master-register-status success";
+        status.textContent="追加完了："+value;
+      }
+    }catch(error){
+      console.error("作業班マスタ追加エラー",error);
+      if(status){
+        status.className="master-register-status error";
+        status.textContent="作業班マスタの追加に失敗しました。";
+      }
+    }
+  }
+
   function directRegister(event){
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -695,11 +864,25 @@ A003" rows="5"></textarea>
       badge.textContent="登録機能 Ver."+VERSION+" 読込済み";
     }
 
+    const siteButton=byId("addSiteMaster");
+    if(siteButton && siteButton.dataset.directMasterBound!=="1"){
+      siteButton.dataset.directMasterBound="1";
+      siteButton.addEventListener("click",directAddSite,true);
+    }
+
+    const teamButton=byId("addTeamMaster");
+    if(teamButton && teamButton.dataset.directMasterBound!=="1"){
+      teamButton.dataset.directMasterBound="1";
+      teamButton.addEventListener("click",directAddTeam,true);
+    }
+
     const button=byId("addWorkerMaster");
     if(button && button.dataset.directRegister!=="1"){
       button.dataset.directRegister="1";
       button.addEventListener("click",directRegister,true);
     }
+
+    renderSiteTeamDirect();
     renderWorkerSelectDirect(byId("workerId")?.value||"");
   }
 
