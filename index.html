@@ -6,8 +6,8 @@
 <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
 <meta content="#0f172a" name="theme-color"/>
 <title>現場 顔動画コンディションチェック</title>
-<link href="manifest.webmanifest?v=1032" rel="manifest"/>
-<link href="styles.css?v=1032" rel="stylesheet"/>
+<link href="manifest.webmanifest?v=104" rel="manifest"/>
+<link href="styles.css?v=104" rel="stylesheet"/>
 </head>
 <body>
 <header>
@@ -23,79 +23,72 @@
 </header>
 <main>
 <section class="view active" id="check">
-<div class="card form-grid">
-<label>作業員ID
-      <input autocomplete="off" id="workerId" list="workerIdList" placeholder="例：A001"/>
-<datalist id="workerIdList"></datalist>
-</label>
-<label>作業員名
-      <input autocomplete="off" id="workerName" placeholder="例：山田 太郎"/>
-</label>
-<label>現場名
-      <input autocomplete="off" id="siteName" list="siteNameList" placeholder="例：○○ポンプ所"/>
-<datalist id="siteNameList"></datalist>
-</label>
-<label>作業班
-      <input autocomplete="off" id="teamName" list="teamNameList" placeholder="例：機械班"/>
-<datalist id="teamNameList"></datalist>
-</label>
-<label>作業内容
-      <select id="workType">
-<option value="general">一般作業</option>
-<option value="light">軽作業・監視</option>
-<option value="electrical">電気・計装</option>
-<option value="piping">配管・機械据付</option>
-<option value="scaffold">足場・高所</option>
-<option value="civil">土木・掘削</option>
-<option value="welding">溶接・火気</option>
-<option value="confined">槽内・閉所</option>
-</select>
-</label>
-<label>測定区分
-      <select id="timing">
-<option>朝礼前</option>
-<option>10時休憩</option>
-<option>昼休憩後</option>
-<option>15時休憩</option>
-<option>作業中</option>
-<option>休憩後再測定</option>
-</select>
-</label>
-</div>
-<div class="card">
-<h2 class="subhead">現場条件・本人申告</h2>
-<div class="form-grid">
-<label>WBGT（任意）
-        <input id="wbgt" max="50" min="0" placeholder="例：28.5" step="0.1" type="number"/>
-</label>
-<label>作業強度
-        <select id="workload">
-<option value="low">軽作業</option>
-<option selected="" value="medium">中作業</option>
-<option value="high">重作業</option>
-</select>
-</label>
-<label>直近30分の水分補給
-        <select id="hydration">
-<option value="yes">あり</option>
-<option value="little">少量</option>
-<option value="no">なし</option>
-</select>
-</label>
-<label>体調申告
-        <select id="selfCondition">
-<option value="normal">異常なし</option>
-<option value="slight">少し気になる</option>
-<option value="bad">明らかに体調が悪い</option>
-</select>
-</label>
-</div>
-<div class="symptoms">
-<label><input id="symDizzy" type="checkbox"/> めまい・ふらつき</label>
-<label><input id="symNausea" type="checkbox"/> 吐き気・頭痛</label>
-<label><input id="symCramp" type="checkbox"/> 筋肉のけいれん</label>
-<label><input id="symConfusion" type="checkbox"/> 受け答えがおかしい</label>
-</div>
+
+<div class="card quick-check-card">
+  <div class="quick-check-heading">
+    <div>
+      <h2 class="subhead">かんたん測定</h2>
+      <p>作業員を選び、現在の体調を1回タップして撮影します。</p>
+    </div>
+    <span class="quick-step-badge">3ステップ</span>
+  </div>
+
+  <div class="quick-check-grid">
+    <label class="quick-step">
+      <span class="quick-step-number">1</span>
+      <span class="quick-step-label">作業員IDを選ぶ</span>
+      <select id="workerId">
+        <option value="">作業員を選択してください</option>
+      </select>
+    </label>
+
+    <fieldset class="quick-step condition-choice">
+      <legend>
+        <span class="quick-step-number">2</span>
+        <span class="quick-step-label">体調異常はありますか？</span>
+      </legend>
+      <div class="condition-choice-buttons">
+        <label>
+          <input type="radio" name="simpleCondition" id="conditionNone" value="normal" checked>
+          <span>異常なし</span>
+        </label>
+        <label>
+          <input type="radio" name="simpleCondition" id="conditionYes" value="bad">
+          <span>異常あり</span>
+        </label>
+      </div>
+      <p id="conditionHelp" class="condition-help">
+        めまい、頭痛、吐き気、強いだるさ、受け答えの異常などがある場合は「異常あり」を選択してください。
+      </p>
+    </fieldset>
+
+    <div class="quick-step quick-start-guide">
+      <span class="quick-step-number">3</span>
+      <span class="quick-step-label">撮影開始</span>
+      <strong>カメラ開始後、「測定開始」を押してください。</strong>
+    </div>
+  </div>
+
+  <div id="selectedWorkerSummary" class="selected-worker-summary">
+    作業員を選択すると、氏名・現場・作業班を自動表示します。
+  </div>
+
+  <!-- マスタから自動設定される内部項目 -->
+  <div class="auto-context-fields" aria-hidden="true">
+    <input id="workerName" type="hidden">
+    <input id="siteName" type="hidden">
+    <input id="teamName" type="hidden">
+    <input id="workType" type="hidden" value="general">
+    <input id="timing" type="hidden" value="作業中">
+    <input id="wbgt" type="hidden">
+    <input id="workload" type="hidden" value="medium">
+    <input id="hydration" type="hidden" value="yes">
+    <input id="selfCondition" type="hidden" value="normal">
+    <input id="symDizzy" type="checkbox">
+    <input id="symNausea" type="checkbox">
+    <input id="symCramp" type="checkbox">
+    <input id="symConfusion" type="checkbox">
+  </div>
 </div>
 <div class="card camera-card">
 <div class="measure-status-grid">
@@ -107,6 +100,7 @@
 <div><span>まばたき</span><strong id="blinkStatus">未確認</strong></div>
 <div><span>危険度スコア</span><strong id="riskScoreStatus">--</strong></div>
 <div><span>悪化傾向</span><strong id="forecastStatus">未評価</strong></div>
+<div><span>3区間判定</span><strong id="segmentStatus">準備前</strong></div>
 </div>
 <div class="camera-wrap">
 <video id="video" muted="" playsinline=""></video>
@@ -171,6 +165,9 @@
 <div class="result-metric metric-context"><span>🌡</span><div><small>WBGT・本人申告</small><strong id="resultContext">--</strong><em id="tagContext">未入力</em></div></div>
 </div>
 <div class="result-factor-summary" id="resultFactorSummary"></div>
+<div class="segment-result-summary" id="segmentResultSummary">
+  3区間解析：測定後に表示します。
+</div>
 </section>
 <section class="result-action-card">
 <h3>今やること（推奨アクション）</h3>
@@ -539,8 +536,8 @@ A003" rows="5"></textarea>
 </div>
 </section>
 </main>
-<footer>Prototype v10.3.2（管理一覧レイアウト修正版）</footer>
-<script src="face-landmarker.js?v=1032" type="module"></script>
-<script src="app.js?v=1032"></script>
+<footer>Prototype v10.4（かんたん測定・3区間安定判定版）</footer>
+<script src="face-landmarker.js?v=104" type="module"></script>
+<script src="app.js?v=104"></script>
 </body>
 </html>

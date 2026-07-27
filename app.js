@@ -280,7 +280,10 @@ async function startMeasure(){
   const guide=$("guide");
   try{
     if(guide) guide.textContent="測定開始を受け付けました。";
-    if(!validateFields()){ alert("作業員ID・作業員名・現場名を入力してください。"); return; }
+    fillWorkerFromMaster();
+    syncSimpleCondition();
+    if(!$("workerId")?.value){ alert("作業員IDを選択してください。"); return; }
+    if(!$("workerName")?.value){ alert("作業員マスタの登録内容を確認してください。"); return; }
     if(!state.stream){ guide.textContent="カメラが開始されていません。"; return; }
 
     const video=$("video");
@@ -298,6 +301,7 @@ async function startMeasure(){
     $("quality").textContent="準備中";
     $("stability").textContent="--";
     $("bpmLive").textContent="--";
+    if($("segmentStatus"))$("segmentStatus").textContent="解析中";
     guide.textContent="測定を開始しました。顔を枠内に入れ、正面を向いてください。";
 
     const started=performance.now();
@@ -444,6 +448,145 @@ function updateSummary(){
   if($("sumOrange"))$("sumOrange").textContent=c.orange;
   if($("sumRed"))$("sumRed").textContent=c.red;
 }
+
+function syncSimpleCondition(){
+  const selected=document.querySelector('input[name="simpleCondition"]:checked')?.value||"normal";
+  if($("selfCondition"))$("selfCondition").value=selected;
+  const hasAbnormal=selected==="bad";
+  // 1問方式のため、個別症状は保存せず「体調異常あり」を重大申告として扱う
+  ["symDizzy","symNausea","symCramp","symConfusion"].forEach(id=>{
+    if($(id))$(id).checked=false;
+  });
+  const help=$("conditionHelp");
+  if(help){
+    help.textContent=hasAbnormal
+      ?"体調異常がある場合は、顔判定に関係なく作業を中止し、管理者が対面確認してください。"
+      :"めまい、頭痛、吐き気、強いだるさ、受け答えの異常などがある場合は「異常あり」を選択してください。";
+  }
+}
+
+function medianNumber(values){
+  const nums=values.map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
+  if(!nums.length)return 0;
+  const m=Math.floor(nums.length/2);
+  return nums.length%2?nums[m]:(nums[m-1]+nums[m])/2;
+}
+
+function majorityLabel(labels){
+  const counts={};
+  labels.forEach(v=>counts[v]=(counts[v]||0)+1);
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  return sorted.length&&sorted[0][1]>=2?sorted[0][0]:null;
+}
+
+function analyzeFaceThreeSegments(samples){
+  const total=samples.length;
+  if(total<150){
+    const fallback=analyzeFace(samples);
+    return {
+      ...fallback,
+      segmentAnalysis:[],
+      segmentReliable:false,
+      segmentReason:"測定データが不足したため、3区間判定を完了できませんでした。",
+      remeasureRecommended:true
+    };
+  }
+
+  const third=Math.floor(total/3);
+  const segmentSamples=[
+    samples.slice(0,third),
+    samples.slice(third,third*2),
+    samples.slice(third*2)
+  ];
+  const segments=segmentSamples.map((part,index)=>({
+    index:index+1,
+    ...analyzeFace(part)
+  }));
+
+  const colorLabels=segments.map(s=>s.colorChangeLabel);
+  const asymLabels=segments.map(s=>s.asymmetryLabel);
+  const colorMajority=majorityLabel(colorLabels);
+  const asymMajority=majorityLabel(asymLabels);
+
+  // 顔色変化は2区間以上で一致した区分を採用する。
+  // 例：大・大・小 → 大
+  const colorRank={小:0,中:1,大:2,不足:-1};
+  const adoptedColorLabel=colorMajority||
+    colorLabels.slice().sort((a,b)=>(colorRank[b]??-1)-(colorRank[a]??-1))[0]||"不足";
+
+  // 左右差は3区間が「小・中・大」のようにばらつく場合、信頼性低として再測定。
+  const asymReliable=Boolean(asymMajority);
+  const segmentReliable=asymReliable && segments.every(s=>s.quality>=55);
+
+  const keys=[
+    "quality","avgMotion","colorChange","rednessChange","brightnessChange",
+    "blueChange","asymmetry","paleScore","redScore","avgLum","lightingBias",
+    "positionScore","trackingRate","blinkCount","avgRoll","avgYaw","avgHeadMovement"
+  ];
+  const combined={};
+  keys.forEach(key=>combined[key]=medianNumber(segments.map(s=>s[key])));
+
+  const representative=segments.reduce((best,s)=>{
+    if(!best)return s;
+    const distance=Math.abs((s.colorChange||0)-combined.colorChange);
+    const bestDistance=Math.abs((best.colorChange||0)-combined.colorChange);
+    return distance<bestDistance?s:best;
+  },null);
+
+  Object.assign(combined,{
+    qualityLabel:combined.quality>=75?"良好":combined.quality>=55?"注意":"不足",
+    motionLabel:combined.avgMotion<4?"小":combined.avgMotion<8?"中":"大",
+    colorChangeLabel:adoptedColorLabel,
+    asymmetryLabel:asymMajority||"ばらつき",
+    lightingLabel:representative?.lightingLabel||"未評価",
+    positionLabel:representative?.positionLabel||"未評価",
+    poseLabel:representative?.poseLabel||"未評価",
+    blinkLabel:representative?.blinkLabel||"未評価",
+    segmentAnalysis:segments.map(s=>({
+      index:s.index,
+      colorChange:s.colorChange,
+      colorChangeLabel:s.colorChangeLabel,
+      asymmetry:s.asymmetry,
+      asymmetryLabel:s.asymmetryLabel,
+      quality:s.quality,
+      qualityLabel:s.qualityLabel
+    })),
+    segmentReliable,
+    remeasureRecommended:!segmentReliable,
+    segmentReason:!asymReliable
+      ?`左右差の判定が「${asymLabels.join("・")}」とばらついたため、信頼性が低く再測定を推奨します。`
+      :segments.some(s=>s.quality<55)
+        ?`3区間のうち映像品質が不足した区間があるため、再測定を推奨します。`
+        :`顔色変化は「${colorLabels.join("・")}」から「${adoptedColorLabel}」を採用しました。左右差は「${asymLabels.join("・")}」で安定しています。`
+  });
+
+  return combined;
+}
+
+function renderSegmentSummary(face){
+  const status=$("segmentStatus");
+  const summary=$("segmentResultSummary");
+  const segments=face?.segmentAnalysis||[];
+
+  if(!segments.length){
+    if(status)status.textContent="判定不足";
+    if(summary){
+      summary.className="segment-result-summary retry";
+      summary.textContent=face?.segmentReason||"3区間解析を完了できませんでした。";
+    }
+    return;
+  }
+
+  const color=segments.map(s=>s.colorChangeLabel).join("・");
+  const asym=segments.map(s=>s.asymmetryLabel).join("・");
+
+  if(status)status.textContent=face.segmentReliable?"信頼性良好":"再測定推奨";
+  if(summary){
+    summary.className=`segment-result-summary ${face.segmentReliable?"reliable":"retry"}`;
+    summary.textContent=`3区間解析｜顔色変化：${color} → ${face.colorChangeLabel}を採用／左右差：${asym} → ${face.segmentReliable?"判定安定":"信頼性低・再測定推奨"}`;
+  }
+}
+
 function analyzeFace(samples){
   if(samples.length<50){
     return {quality:0,qualityLabel:"不足",avgMotion:99,motionLabel:"不足",
@@ -536,16 +679,15 @@ function finishMeasure(){
   cancelAnimationFrame(state.timer);
   $("startMeasure").disabled=false; $("stopCamera").disabled=false;
 
-  const face=analyzeFace(state.samples);
+  const face=analyzeFaceThreeSegments(state.samples);
+  syncSimpleCondition();
   const context={
-    wbgt:Number($("wbgt").value)||null,
-    workload:$("workload").value,
-    hydration:$("hydration").value,
-    selfCondition:$("selfCondition").value,
-    symptoms:{
-      dizzy:$("symDizzy").checked,nausea:$("symNausea").checked,
-      cramp:$("symCramp").checked,confusion:$("symConfusion").checked
-    }
+    wbgt:Number($("wbgt")?.value)||null,
+    workload:$("workload")?.value||"medium",
+    hydration:$("hydration")?.value||"yes",
+    selfCondition:$("selfCondition")?.value||"normal",
+    symptoms:{},
+    simpleCondition:$("selfCondition")?.value||"normal"
   };
   const baseline=workerFaceBaseline($("workerId").value.trim());
   const result=judge(face,context,baseline);
@@ -554,6 +696,7 @@ function finishMeasure(){
     siteName:$("siteName").value.trim(),teamName:$("teamName")?.value.trim()||"",workType:$("workType")?.value||"general",timing:$("timing").value,
     timestamp:new Date().toISOString()};
   showResult(state.latestResult);
+  renderSegmentSummary(face);
 }
 
 function judge(face,context,baseline){
@@ -562,7 +705,10 @@ function judge(face,context,baseline){
   const symptomCount=Object.values(symptoms).filter(Boolean).length;
 
   if(serious)return {level:"red",label:"赤：作業中止・対面確認",
-    instruction:"本人申告または症状に重大な項目があります。顔判定に関係なく作業を中止し、管理者が直ちに対面確認してください。意識障害、会話異常、自力で水分を取れない状態などがあれば現場の救急手順に従ってください。"};
+    instruction:"体調異常ありと申告されています。顔判定に関係なく作業を中止し、管理者が直ちに対面確認してください。意識障害、会話異常、自力で水分を取れない状態などがあれば現場の救急手順に従ってください。"};
+
+  if(face.remeasureRecommended)return {level:"yellow",label:"判定保留：再測定",
+    instruction:face.segmentReason||"3区間の判定が安定しなかったため、顔を正面に向けて再測定してください。本人に異常があれば再測定を待たず管理者が確認してください。"};
 
   if(face.quality<55)return {level:"yellow",label:"判定保留：再測定",
     instruction:"映像品質が不足しているため顔状態の判定を保留しました。明るい日陰または室内で、顔を正面に向け、スマホを固定して再測定してください。本人に異常があれば測定結果を待たず作業を中止してください。"};
@@ -1361,7 +1507,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.3.2修正版読込済み。カメラを開始してください。";
+$("guide").textContent="v10.4かんたん測定版読込済み。作業員を選択してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -1385,7 +1531,12 @@ function loadMaster(){
 function saveMaster(master){
   master.updatedAt=new Date().toISOString();
   localStorage.setItem(MASTER_KEY,JSON.stringify(master));
-  renderMaster();
+  if($("workerId")){
+  $("workerId").addEventListener("change",fillWorkerFromMaster);
+}
+document.querySelectorAll('input[name="simpleCondition"]').forEach(el=>el.addEventListener("change",syncSimpleCondition));
+syncSimpleCondition();
+renderMaster();
 }
 function uniqueText(list){return [...new Set(list.map(v=>String(v||"").trim()).filter(Boolean))];}
 function downloadJson(filename,data){
@@ -1424,7 +1575,12 @@ function renderMaster(){
   if($("masterWorkerSite"))$("masterWorkerSite").innerHTML=siteOptions;
   if($("masterWorkerTeam"))$("masterWorkerTeam").innerHTML=teamOptions;
 
-  if($("workerIdList"))$("workerIdList").innerHTML=m.workers.map(w=>`<option value="${esc(w.id)}">${esc(w.name)}</option>`).join("");
+  if($("workerId")){
+    const current=$("workerId").value;
+    $("workerId").innerHTML='<option value="">作業員を選択してください</option>'+
+      m.workers.map(w=>`<option value="${esc(w.id)}">${esc(w.name)}（${esc(w.id)}）</option>`).join("");
+    if(m.workers.some(w=>w.id===current))$("workerId").value=current;
+  }
   if($("siteNameList"))$("siteNameList").innerHTML=m.sites.map(s=>`<option value="${esc(s)}"></option>`).join("");
   if($("teamNameList"))$("teamNameList").innerHTML=m.teams.map(s=>`<option value="${esc(s)}"></option>`).join("");
 
@@ -1445,13 +1601,39 @@ function renderMaster(){
 }
 
 function fillWorkerFromMaster(){
-  const id=$("workerId")?.value.trim();
-  if(!id)return;
+  const id=$("workerId")?.value||"";
+  const summary=$("selectedWorkerSummary");
+
+  if(!id){
+    if($("workerName"))$("workerName").value="";
+    if($("siteName"))$("siteName").value="";
+    if($("teamName"))$("teamName").value="";
+    if(summary){
+      summary.className="selected-worker-summary";
+      summary.textContent="作業員を選択すると、氏名・現場・作業班を自動表示します。";
+    }
+    return;
+  }
+
   const w=loadMaster().workers.find(x=>x.id===id);
-  if(!w)return;
+  if(!w){
+    if(summary){
+      summary.className="selected-worker-summary error";
+      summary.textContent="選択した作業員がマスタに見つかりません。設定画面で登録してください。";
+    }
+    return;
+  }
+
   $("workerName").value=w.name||"";
-  if(w.site)$("siteName").value=w.site;
-  if($("teamName")&&w.team)$("teamName").value=w.team;
+  $("siteName").value=w.site||"";
+  $("teamName").value=w.team||"";
+  if($("workType"))$("workType").value=w.workType||"general";
+  if($("workload"))$("workload").value=w.workload||"medium";
+
+  if(summary){
+    summary.className="selected-worker-summary";
+    summary.textContent=`${w.name||w.id}／${w.site||"現場未設定"}／${w.team||"班未設定"}`;
+  }
 }
 
 function addSiteMaster(){
