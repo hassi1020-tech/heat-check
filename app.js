@@ -1,5 +1,8 @@
+"use strict";
+const MASTER_KEY="heatCheckMasterV94";
+const NOTICE_KEY="heatCheckNoticeAckV94";
 
-
+/* Ver.10.4.5: 保存キーを全処理より先に定義 */
 function decisionLevelText(r,score){
   if(score>=80||r.level==="red")return "レベル4・危険";
   if(score>=60||r.level==="orange")return "レベル3・要休憩";
@@ -280,8 +283,9 @@ async function startMeasure(){
   const guide=$("guide");
   try{
     if(guide) guide.textContent="測定開始を受け付けました。";
-    fillWorkerFromMaster();
-    syncSimpleCondition();
+    if(typeof MASTER_KEY!=="string")throw new Error("作業員マスタ初期化未完了");
+    if(typeof fillWorkerFromMaster==="function")fillWorkerFromMaster();
+    if(typeof syncSimpleCondition==="function")syncSimpleCondition();
     if(!$("workerId")?.value){ alert("作業員IDを選択してください。"); return; }
     if(!$("workerName")?.value){ alert("作業員マスタの登録内容を確認してください。"); return; }
     if(!state.stream){ guide.textContent="カメラが開始されていません。"; return; }
@@ -1504,7 +1508,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.4.4作業員マスタ同期修正版読込済み。作業員を選択してください。";
+$("guide").textContent="v10.4.5保存キー初期化修正版読込済み。作業員を選択してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -1514,9 +1518,6 @@ if("caches" in window){
   caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))).catch(()=>{});
 }
 window.addEventListener("beforeunload",()=>state.stream?.getTracks().forEach(t=>t.stop()));
-const MASTER_KEY="heatCheckMasterV94";
-const NOTICE_KEY="heatCheckNoticeAckV94";
-
 function defaultMaster(){
   return {version:"9.4",sites:[],teams:[],workers:[],updatedAt:new Date().toISOString()};
 }
@@ -2259,7 +2260,8 @@ try{
   renderNotifications();
   fillWorkerFromMaster();
   syncSimpleCondition();
-  console.info("v10.4.4 作業員マスタ同期修正版 読込完了");
+  window.heatCheckAppReady=true;
+  console.info("v10.4.5 保存キー初期化修正版 読込完了");
 }catch(err){
   console.error("初期化エラー:",err);
   const summary=document.getElementById("selectedWorkerSummary");
