@@ -1507,7 +1507,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.4かんたん測定版読込済み。作業員を選択してください。";
+$("guide").textContent="v10.4.1作業員登録反映修正版読込済み。作業員を選択してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -1578,7 +1578,7 @@ function renderMaster(){
   if($("workerId")){
     const current=$("workerId").value;
     $("workerId").innerHTML='<option value="">作業員を選択してください</option>'+
-      m.workers.map(w=>`<option value="${esc(w.id)}">${esc(w.name)}（${esc(w.id)}）</option>`).join("");
+      m.workers.filter(w=>w.active!==false).map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}（${esc(w.id)}）</option>`).join("");
     if(m.workers.some(w=>w.id===current))$("workerId").value=current;
   }
   if($("siteNameList"))$("siteNameList").innerHTML=m.sites.map(s=>`<option value="${esc(s)}"></option>`).join("");
@@ -1647,17 +1647,51 @@ function addTeamMaster(){
   $("masterTeamName").value="";
 }
 function addWorkerMaster(){
-  const id=$("masterWorkerId").value.trim(),name=$("masterWorkerName").value.trim();
-  if(!id||!name){alert("作業員IDと氏名を入力してください。");return;}
+  const id=$("masterWorkerId")?.value.trim()||"";
+  const enteredName=$("masterWorkerName")?.value.trim()||"";
+
+  if(!id){
+    alert("作業員IDを入力してください。");
+    $("masterWorkerId")?.focus();
+    return;
+  }
+
   const m=loadMaster();
-  const item={id,name,site:$("masterWorkerSite").value,team:$("masterWorkerTeam").value,active:true};
+  const existing=m.workers.find(w=>w.id===id);
+
+  // 氏名が未入力の場合は、作業員IDを表示名として登録する。
+  // 後から同じIDで氏名を入力して再登録すれば更新可能。
+  const name=enteredName||existing?.name||id;
+  const item={
+    id,
+    name,
+    site:$("masterWorkerSite")?.value||existing?.site||"",
+    team:$("masterWorkerTeam")?.value||existing?.team||"",
+    workType:existing?.workType||"general",
+    workload:existing?.workload||"medium",
+    active:true
+  };
+
   const index=m.workers.findIndex(w=>w.id===id);
-  if(index>=0)m.workers[index]=item;else m.workers.push(item);
+  if(index>=0)m.workers[index]=item;
+  else m.workers.push(item);
+
   m.workers.sort((a,b)=>a.id.localeCompare(b.id,"ja"));
   saveMaster(m);
-  ["masterWorkerId","masterWorkerName"].forEach(x=>$(x).value="");
-}
 
+  // 登録直後に「かんたん測定」の選択欄へ反映し、その作業員を選択状態にする。
+  renderMaster();
+  if($("workerId")){
+    $("workerId").value=id;
+    fillWorkerFromMaster();
+  }
+
+  ["masterWorkerId","masterWorkerName"].forEach(x=>{
+    if($(x))$(x).value="";
+  });
+
+  alert(`作業員「${name}（${id}）」を登録し、かんたん測定へ反映しました。`);
+}
 function populateAdminTeams(){
   const select=$("adminTeam");if(!select)return;
   const current=select.value;
