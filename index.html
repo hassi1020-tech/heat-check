@@ -6,8 +6,8 @@
 <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
 <meta content="#0f172a" name="theme-color"/>
 <title>現場 顔動画コンディションチェック</title>
-<link href="manifest.webmanifest?v=1042" rel="manifest"/>
-<link href="styles.css?v=1042" rel="stylesheet"/>
+<link href="manifest.webmanifest?v=1043" rel="manifest"/>
+<link href="styles.css?v=1043" rel="stylesheet"/>
 </head>
 <body>
 <header>
@@ -538,8 +538,173 @@ A003" rows="5"></textarea>
 </div>
 </section>
 </main>
-<footer>Prototype v10.4.2（作業員登録・初期化順序修正版）</footer>
-<script src="face-landmarker.js?v=1042" type="module"></script>
-<script src="app.js?v=1042"></script>
+<footer>Prototype v10.4.3（登録専用処理・キャッシュ解除版）</footer>
+<script src="face-landmarker.js?v=1043" type="module"></script>
+<script src="app.js?v=1043"></script>
+
+<script>
+(function(){
+  "use strict";
+  const VERSION="10.4.3";
+  const MASTER_KEY="heatCheckMasterV94";
+
+  function byId(id){return document.getElementById(id);}
+  function escapeHtml(value){
+    return String(value??"").replace(/[&<>"']/g,function(ch){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch];
+    });
+  }
+  function loadMasterDirect(){
+    try{
+      const saved=JSON.parse(localStorage.getItem(MASTER_KEY)||"{}");
+      return {
+        version:saved.version||"9.4",
+        sites:Array.isArray(saved.sites)?saved.sites:[],
+        teams:Array.isArray(saved.teams)?saved.teams:[],
+        workers:Array.isArray(saved.workers)?saved.workers:[],
+        updatedAt:saved.updatedAt||new Date().toISOString()
+      };
+    }catch(error){
+      return {version:"9.4",sites:[],teams:[],workers:[],updatedAt:new Date().toISOString()};
+    }
+  }
+  function saveMasterDirect(master){
+    master.updatedAt=new Date().toISOString();
+    localStorage.setItem(MASTER_KEY,JSON.stringify(master));
+  }
+  function renderWorkerSelectDirect(selectedId){
+    const master=loadMasterDirect();
+    const select=byId("workerId");
+    if(select){
+      select.innerHTML='<option value="">作業員を選択してください</option>'+
+        master.workers
+          .filter(function(w){return w.active!==false;})
+          .sort(function(a,b){return String(a.id).localeCompare(String(b.id),"ja");})
+          .map(function(w){
+            const id=escapeHtml(w.id);
+            const name=escapeHtml(w.name||w.id);
+            return '<option value="'+id+'">'+name+'（'+id+'）</option>';
+          }).join("");
+      if(selectedId && master.workers.some(function(w){return w.id===selectedId;})){
+        select.value=selectedId;
+        select.dispatchEvent(new Event("change",{bubbles:true}));
+      }
+    }
+
+    const list=byId("workerMasterList");
+    if(list){
+      list.innerHTML=master.workers.length
+        ? master.workers.map(function(w){
+            return '<div class="worker-master-row">'+
+              '<strong>'+escapeHtml(w.id)+'</strong>'+
+              '<span>'+escapeHtml(w.name||w.id)+'</span>'+
+              '<span>'+escapeHtml(w.site||"所属未設定")+'</span>'+
+              '<span>'+escapeHtml(w.team||"班未設定")+'</span>'+
+              '<button type="button" data-direct-delete-worker="'+escapeHtml(w.id)+'">削除</button>'+
+              '</div>';
+          }).join("")
+        : "作業員は未登録です。";
+
+      list.querySelectorAll("[data-direct-delete-worker]").forEach(function(button){
+        button.addEventListener("click",function(){
+          const id=button.getAttribute("data-direct-delete-worker");
+          const m=loadMasterDirect();
+          m.workers=m.workers.filter(function(w){return w.id!==id;});
+          saveMasterDirect(m);
+          renderWorkerSelectDirect("");
+        });
+      });
+    }
+  }
+  function directRegister(event){
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    const id=(byId("masterWorkerId")?.value||"").trim();
+    const enteredName=(byId("masterWorkerName")?.value||"").trim();
+    const status=byId("workerRegisterStatus");
+
+    if(!id){
+      if(status){
+        status.className="worker-register-status error";
+        status.textContent="作業員IDを入力してください。";
+      }
+      byId("masterWorkerId")?.focus();
+      return;
+    }
+
+    try{
+      const master=loadMasterDirect();
+      const index=master.workers.findIndex(function(w){return w.id===id;});
+      const previous=index>=0?master.workers[index]:{};
+      const worker={
+        id:id,
+        name:enteredName||previous.name||id,
+        site:byId("masterWorkerSite")?.value||previous.site||"",
+        team:byId("masterWorkerTeam")?.value||previous.team||"",
+        workType:previous.workType||"general",
+        workload:previous.workload||"medium",
+        active:true
+      };
+      if(index>=0)master.workers[index]=worker;
+      else master.workers.push(worker);
+      saveMasterDirect(master);
+      renderWorkerSelectDirect(id);
+
+      if(byId("masterWorkerId"))byId("masterWorkerId").value="";
+      if(byId("masterWorkerName"))byId("masterWorkerName").value="";
+
+      if(status){
+        status.className="worker-register-status success";
+        status.textContent="登録完了："+worker.name+"（"+worker.id+"）を、かんたん測定へ反映しました。";
+      }
+    }catch(error){
+      console.error("直接登録エラー",error);
+      if(status){
+        status.className="worker-register-status error";
+        status.textContent="登録に失敗しました。ブラウザのサイトデータ保存が許可されているか確認してください。";
+      }
+    }
+  }
+
+  function setup(){
+    const badge=byId("workerRegisterStatus");
+    if(badge && !badge.textContent){
+      badge.className="worker-register-status";
+      badge.textContent="登録機能 Ver."+VERSION+" 読込済み";
+    }
+
+    const button=byId("addWorkerMaster");
+    if(button && button.dataset.directRegister!=="1"){
+      button.dataset.directRegister="1";
+      button.addEventListener("click",directRegister,true);
+    }
+    renderWorkerSelectDirect(byId("workerId")?.value||"");
+  }
+
+  // 旧Service Workerとキャッシュをこの版で一度だけ解除する。
+  const resetKey="heatCheckCacheReset_"+VERSION;
+  if(!sessionStorage.getItem(resetKey)){
+    sessionStorage.setItem(resetKey,"1");
+    if("serviceWorker" in navigator){
+      navigator.serviceWorker.getRegistrations()
+        .then(function(regs){return Promise.all(regs.map(function(reg){return reg.unregister();}));})
+        .catch(function(){});
+    }
+    if("caches" in window){
+      caches.keys()
+        .then(function(keys){return Promise.all(keys.map(function(key){return caches.delete(key);}));})
+        .catch(function(){});
+    }
+  }
+
+  if(document.readyState==="loading"){
+    document.addEventListener("DOMContentLoaded",setup,{once:true});
+  }else{
+    setup();
+  }
+})();
+</script>
+
 </body>
 </html>

@@ -1504,7 +1504,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.4.2作業員登録・初期化順序修正版読込済み。作業員を選択してください。";
+$("guide").textContent="v10.4.3登録専用処理・キャッシュ解除版読込済み。作業員を選択してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -2219,7 +2219,7 @@ try{
   renderNotifications();
   fillWorkerFromMaster();
   syncSimpleCondition();
-  console.info("v10.4.2 作業員登録・初期化順序修正版 読込完了");
+  console.info("v10.4.3 登録専用処理・キャッシュ解除版 読込完了");
 }catch(err){
   console.error("初期化エラー:",err);
   const summary=document.getElementById("selectedWorkerSummary");
