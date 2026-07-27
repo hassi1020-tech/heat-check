@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <title>現場 AIコンディションチェック Ver.11.2</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1102s3">
-  <link rel="stylesheet" href="styles.css?v=1102s3">
+  <link rel="manifest" href="manifest.webmanifest?v=1102s4">
+  <link rel="stylesheet" href="styles.css?v=1102s4">
 </head>
 <body>
 <header class="app-header">
@@ -178,6 +178,64 @@
       </div>
     </article>
 
+    <article class="admin-panel master-transfer-panel">
+      <div class="master-panel-head">
+        <div>
+          <h3>現場運用マスタ共有</h3>
+          <p class="small-note">PCで作成したマスタをスマホへ反映します。</p>
+        </div>
+        <span id="masterSyncStatus" class="master-status-badge">端末保存</span>
+      </div>
+
+      <div class="master-info-grid">
+        <div>
+          <span>マスタ版番号</span>
+          <strong id="masterVersionDisplay">—</strong>
+        </div>
+        <div>
+          <span>最終更新</span>
+          <strong id="masterUpdatedDisplay">—</strong>
+        </div>
+        <div>
+          <span>現場数</span>
+          <strong id="masterSiteCount">0</strong>
+        </div>
+        <div>
+          <span>作業員数</span>
+          <strong id="masterWorkerCount">0</strong>
+        </div>
+      </div>
+
+      <div class="master-transfer-actions">
+        <button id="exportMasterJson" type="button" class="primary-button">
+          マスタのみ出力
+        </button>
+
+        <label class="file-button">
+          マスタのみ取込
+          <input id="importMasterJson" type="file" accept=".json,application/json">
+        </label>
+      </div>
+
+      <fieldset class="master-import-mode">
+        <legend>取込方法</legend>
+        <label>
+          <input type="radio" name="masterImportMode" value="merge" checked>
+          既存マスタへ追加・同一IDは上書き
+        </label>
+        <label>
+          <input type="radio" name="masterImportMode" value="replace">
+          端末内のマスタをすべて置き換え
+        </label>
+      </fieldset>
+
+      <div id="masterImportPreview" class="master-import-preview hidden"></div>
+
+      <p class="master-caution">
+        測定履歴・カルテ・顔解析数値は変更しません。画像や動画はマスタファイルに含まれません。
+      </p>
+    </article>
+
     <article class="admin-panel">
       <h3>データ管理</h3>
       <div class="admin-data-buttons">
@@ -311,6 +369,6 @@
 <footer>
   Prototype Ver.11.2／非接触スクリーニング。医療診断には使用できません。
 </footer>
-<script src="app.js?v=1102s3"></script>
+<script src="app.js?v=1102s4"></script>
 </body>
 </html>

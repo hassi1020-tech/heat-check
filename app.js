@@ -309,7 +309,7 @@ function init(){
 }
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 init();
-console.info("現場 AIコンディションチェック Ver.11.2 第3段階 読込完了");
+console.info("現場 AIコンディションチェック Ver.11.2 第4段階 読込完了");
 
 /* =========================================================
    Ver.11.2 第3段階：管理者ダッシュボード・データ管理
@@ -632,3 +632,359 @@ if(document.readyState==="loading"){
 }
 
 window.addEventListener("storage",renderAdminDashboard);
+
+
+/* =========================================================
+   Ver.11.2 第4段階：現場運用マスタ端末間共有
+   ========================================================= */
+
+const MASTER_META_KEY = "heatCheckMasterMeta";
+
+const MASTER_DEFINITIONS = {
+  sites: {
+    keys: ["sites", "heatCheckSites", "siteMaster"],
+    idFields: ["id", "siteId", "code"],
+    label: "現場"
+  },
+  teams: {
+    keys: ["teams", "heatCheckTeams", "teamMaster"],
+    idFields: ["id", "teamId", "code"],
+    label: "班"
+  },
+  workers: {
+    keys: ["workers", "heatCheckWorkers", "workerMaster"],
+    idFields: ["id", "workerId", "code"],
+    label: "作業員"
+  },
+  settings: {
+    keys: ["operationSettings", "heatCheckSettings", "settingsMaster"],
+    idFields: ["id", "key", "code"],
+    label: "運用設定"
+  }
+};
+
+function masterReadArray(definition){
+  for(const key of definition.keys){
+    try{
+      const parsed = JSON.parse(localStorage.getItem(key) || "null");
+      if(Array.isArray(parsed)) return {key, data:parsed};
+    }catch(_){}
+  }
+  return {key:definition.keys[0], data:[]};
+}
+
+function masterWriteArray(definition, key, data){
+  const destinationKey = key || definition.keys[0];
+  localStorage.setItem(destinationKey, JSON.stringify(data));
+}
+
+function masterItemId(item, definition, index){
+  for(const field of definition.idFields){
+    const value = item?.[field];
+    if(value !== undefined && value !== null && String(value).trim() !== ""){
+      return String(value);
+    }
+  }
+
+  const name = item?.name || item?.workerName || item?.siteName || item?.teamName;
+  if(name) return `name:${String(name).trim()}`;
+
+  return `index:${index}`;
+}
+
+function getMasterMeta(){
+  try{
+    const parsed = JSON.parse(localStorage.getItem(MASTER_META_KEY) || "null");
+    if(parsed && typeof parsed === "object") return parsed;
+  }catch(_){}
+
+  return {
+    masterVersion: "未設定",
+    updatedAt: null,
+    source: "端末保存"
+  };
+}
+
+function createMasterVersion(){
+  const date = new Date();
+  const pad = value => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth()+1),
+    pad(date.getDate()),
+    "-",
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds())
+  ].join("");
+}
+
+function saveMasterMeta(meta){
+  localStorage.setItem(MASTER_META_KEY, JSON.stringify(meta));
+}
+
+function collectOperationMaster(){
+  const collections = {};
+
+  Object.entries(MASTER_DEFINITIONS).forEach(([name,definition])=>{
+    const result = masterReadArray(definition);
+    collections[name] = {
+      storageKey: result.key,
+      items: result.data
+    };
+  });
+
+  return collections;
+}
+
+function countMasterItems(collections, name){
+  return Array.isArray(collections?.[name]?.items)
+    ? collections[name].items.length
+    : 0;
+}
+
+function formatMasterDate(value){
+  if(!value) return "未設定";
+  const date = new Date(value);
+  if(Number.isNaN(date.getTime())) return "未設定";
+
+  return new Intl.DateTimeFormat("ja-JP",{
+    year:"numeric",
+    month:"2-digit",
+    day:"2-digit",
+    hour:"2-digit",
+    minute:"2-digit"
+  }).format(date);
+}
+
+function renderMasterTransferStatus(){
+  const collections = collectOperationMaster();
+  const meta = getMasterMeta();
+
+  const versionEl = $("masterVersionDisplay");
+  if(!versionEl) return;
+
+  versionEl.textContent = meta.masterVersion || "未設定";
+  $("masterUpdatedDisplay").textContent = formatMasterDate(meta.updatedAt);
+  $("masterSiteCount").textContent = countMasterItems(collections, "sites");
+  $("masterWorkerCount").textContent = countMasterItems(collections, "workers");
+
+  const badge = $("masterSyncStatus");
+  badge.textContent = meta.source || "端末保存";
+  badge.className = "master-status-badge";
+
+  if(meta.source === "ファイル取込"){
+    badge.classList.add("imported");
+  }else if(meta.source === "PC作成"){
+    badge.classList.add("pc-created");
+  }
+}
+
+function exportOperationMaster(){
+  const collections = collectOperationMaster();
+  const now = new Date().toISOString();
+  const version = createMasterVersion();
+
+  const payload = {
+    schema: "heat-check-operation-master",
+    schemaVersion: 1,
+    app: "現場 AIコンディションチェック",
+    appVersion: "11.2-stage4",
+    masterVersion: version,
+    updatedAt: now,
+    exportedAt: now,
+    containsMeasurements: false,
+    containsImages: false,
+    master: {}
+  };
+
+  Object.entries(collections).forEach(([name,value])=>{
+    payload.master[name] = value.items;
+  });
+
+  saveMasterMeta({
+    masterVersion: version,
+    updatedAt: now,
+    source: "PC作成"
+  });
+
+  downloadTextFile(
+    `heat-check-master-${version}.json`,
+    JSON.stringify(payload, null, 2),
+    "application/json"
+  );
+
+  renderMasterTransferStatus();
+  showMasterMessage(
+    "success",
+    `マスタを出力しました。現場${payload.master.sites.length}件、班${payload.master.teams.length}件、作業員${payload.master.workers.length}件です。`
+  );
+}
+
+function validateMasterPayload(payload){
+  if(!payload || typeof payload !== "object"){
+    throw new Error("JSON形式が正しくありません。");
+  }
+
+  if(payload.schema !== "heat-check-operation-master"){
+    throw new Error("現場運用マスタ用のファイルではありません。");
+  }
+
+  if(!payload.master || typeof payload.master !== "object"){
+    throw new Error("マスタデータがありません。");
+  }
+
+  const validated = {};
+
+  Object.keys(MASTER_DEFINITIONS).forEach(name=>{
+    const value = payload.master[name];
+    validated[name] = Array.isArray(value) ? value : [];
+  });
+
+  return validated;
+}
+
+function mergeMasterArrays(current, incoming, definition){
+  const result = current.map(item=>structuredCloneSafe(item));
+  const indexMap = new Map();
+
+  result.forEach((item,index)=>{
+    indexMap.set(masterItemId(item,definition,index),index);
+  });
+
+  incoming.forEach((item,index)=>{
+    const cloned = structuredCloneSafe(item);
+    const id = masterItemId(cloned,definition,index);
+
+    if(indexMap.has(id)){
+      result[indexMap.get(id)] = cloned;
+    }else{
+      indexMap.set(id,result.length);
+      result.push(cloned);
+    }
+  });
+
+  return result;
+}
+
+function structuredCloneSafe(value){
+  if(typeof structuredClone === "function"){
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
+function selectedMasterImportMode(){
+  return document.querySelector(
+    'input[name="masterImportMode"]:checked'
+  )?.value || "merge";
+}
+
+function showMasterMessage(type,message){
+  const box = $("masterImportPreview");
+  if(!box) return;
+
+  box.classList.remove("hidden","success","warning","error");
+  box.classList.add(type);
+  box.textContent = message;
+}
+
+async function importOperationMaster(event){
+  const file = event.target.files?.[0];
+  if(!file) return;
+
+  try{
+    const payload = JSON.parse(await file.text());
+    const incoming = validateMasterPayload(payload);
+    const mode = selectedMasterImportMode();
+
+    const counts = Object.fromEntries(
+      Object.entries(incoming).map(([name,items])=>[name,items.length])
+    );
+
+    const modeText = mode === "replace"
+      ? "端末内の現場運用マスタをすべて置き換えます。"
+      : "既存マスタへ追加し、同一IDのデータは上書きします。";
+
+    const confirmation = [
+      modeText,
+      "",
+      `現場：${counts.sites}件`,
+      `班：${counts.teams}件`,
+      `作業員：${counts.workers}件`,
+      `運用設定：${counts.settings}件`,
+      "",
+      "測定履歴は変更されません。",
+      "取込みを実行しますか？"
+    ].join("\n");
+
+    if(!confirm(confirmation)) return;
+
+    Object.entries(MASTER_DEFINITIONS).forEach(([name,definition])=>{
+      const current = masterReadArray(definition);
+      const newData = mode === "replace"
+        ? incoming[name].map(item=>structuredCloneSafe(item))
+        : mergeMasterArrays(current.data,incoming[name],definition);
+
+      masterWriteArray(definition,current.key,newData);
+    });
+
+    const importedAt = new Date().toISOString();
+
+    saveMasterMeta({
+      masterVersion: payload.masterVersion || createMasterVersion(),
+      updatedAt: payload.updatedAt || importedAt,
+      importedAt,
+      source: "ファイル取込",
+      importedFilename: file.name,
+      importMode: mode
+    });
+
+    renderMasterTransferStatus();
+
+    if(typeof renderAdminDashboard === "function"){
+      renderAdminDashboard();
+    }
+
+    showMasterMessage(
+      "success",
+      `マスタを取り込みました。取込方式：${mode === "replace" ? "全置換" : "追加・同一ID上書き"}。測定履歴は保持されています。`
+    );
+
+    alert("現場運用マスタを反映しました。測定履歴は変更していません。");
+  }catch(error){
+    showMasterMessage("error",`取込エラー：${error.message}`);
+    alert(`マスタを取り込めませんでした：${error.message}`);
+  }finally{
+    event.target.value = "";
+  }
+}
+
+function touchMasterMeta(source="端末編集"){
+  const current = getMasterMeta();
+  saveMasterMeta({
+    ...current,
+    masterVersion: createMasterVersion(),
+    updatedAt: new Date().toISOString(),
+    source
+  });
+  renderMasterTransferStatus();
+}
+
+function bindMasterTransfer(){
+  $("exportMasterJson")?.addEventListener("click",exportOperationMaster);
+  $("importMasterJson")?.addEventListener("change",importOperationMaster);
+  renderMasterTransferStatus();
+}
+
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded",bindMasterTransfer);
+}else{
+  bindMasterTransfer();
+}
+
+window.addEventListener("storage",event=>{
+  if(event.key === MASTER_META_KEY || event.key === null){
+    renderMasterTransferStatus();
+  }
+});
