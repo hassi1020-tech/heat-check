@@ -1,7 +1,7 @@
 {
-  "name": "現場 AIコンディションチェック Ver.11.3",
-  "short_name": "AI熱中症チェック",
-  "start_url": "./?mode=kiosk&v=1103ka1",
+  "name": "現場 AIコンディションチェック Ver.12.0",
+  "short_name": "熱中症AI",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#f3f7f7",
   "theme_color": "#0f766e",

@@ -1,23 +1,8 @@
-const CACHE="heat-check-v11-1103-kiosk-admin";
-const FILES=[
-  "./",
-  "./index.html",
-  "./styles.css?v=1103ka1",
-  "./app.js?v=1103ka1",
-  "./firebase-cloud.js?v=1103ka1",
-  "./device-mode.js?v=1103ka1",
-  "./manifest.webmanifest?v=1103ka1"
-];
-self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
-self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+const CACHE="heat-check-v12-001";
+const ASSETS=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest"];
+self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
+self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))));
 self.addEventListener("fetch",e=>{
-  if(e.request.url.includes("gstatic.com/firebasejs")||e.request.url.includes("googleapis.com")){
-    e.respondWith(fetch(e.request));
-    return;
-  }
-  e.respondWith(fetch(e.request).then(r=>{
-    const copy=r.clone();
-    caches.open(CACHE).then(c=>c.put(e.request,copy));
-    return r;
-  }).catch(()=>caches.match(e.request)));
+  if(e.request.method!=="GET") return;
+  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
 });
