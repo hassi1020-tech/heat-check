@@ -6,8 +6,8 @@
 <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
 <meta content="#0f172a" name="theme-color"/>
 <title>現場 顔動画コンディションチェック</title>
-<link href="manifest.webmanifest?v=1043" rel="manifest"/>
-<link href="styles.css?v=1043" rel="stylesheet"/>
+<link href="manifest.webmanifest?v=1044" rel="manifest"/>
+<link href="styles.css?v=1044" rel="stylesheet"/>
 </head>
 <body>
 <header>
@@ -538,17 +538,26 @@ A003" rows="5"></textarea>
 </div>
 </section>
 </main>
-<footer>Prototype v10.4.3（登録専用処理・キャッシュ解除版）</footer>
-<script src="face-landmarker.js?v=1043" type="module"></script>
-<script src="app.js?v=1043"></script>
+<footer>Prototype v10.4.4（作業員マスタ同期修正版）</footer>
+<script src="face-landmarker.js?v=1044" type="module"></script>
+<script src="app.js?v=1044"></script>
 
 <script>
 (function(){
   "use strict";
-  const VERSION="10.4.3";
+  const VERSION="10.4.4";
   const MASTER_KEY="heatCheckMasterV94";
 
   function byId(id){return document.getElementById(id);}
+
+  function normalizeId(value){
+    return String(value||"")
+      .trim()
+      .replace(/\u3000/g," ")
+      .replace(/\s+/g,"")
+      .toUpperCase();
+  }
+
   function escapeHtml(value){
     return String(value??"").replace(/[&<>"']/g,function(ch){
       return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch];
@@ -585,8 +594,20 @@ A003" rows="5"></textarea>
             const name=escapeHtml(w.name||w.id);
             return '<option value="'+id+'">'+name+'（'+id+'）</option>';
           }).join("");
-      if(selectedId && master.workers.some(function(w){return w.id===selectedId;})){
-        select.value=selectedId;
+      if(selectedId && master.workers.some(function(w){return normalizeId(w.id)===normalizeId(selectedId);})){
+        const worker=master.workers.find(function(w){return normalizeId(w.id)===normalizeId(selectedId);});
+        const option=[].slice.call(select.options).find(function(o){return normalizeId(o.value)===normalizeId(selectedId);});
+        if(option)select.value=option.value;
+        if(worker){
+          if(byId("workerName"))byId("workerName").value=worker.name||worker.id||"";
+          if(byId("siteName"))byId("siteName").value=worker.site||"";
+          if(byId("teamName"))byId("teamName").value=worker.team||"";
+          const summary=byId("selectedWorkerSummary");
+          if(summary){
+            summary.className="selected-worker-summary";
+            summary.textContent=(worker.name||worker.id)+"／"+(worker.site||"現場未設定")+"／"+(worker.team||"班未設定");
+          }
+        }
         select.dispatchEvent(new Event("change",{bubbles:true}));
       }
     }
@@ -620,7 +641,7 @@ A003" rows="5"></textarea>
     event.preventDefault();
     event.stopImmediatePropagation();
 
-    const id=(byId("masterWorkerId")?.value||"").trim();
+    const id=normalizeId(byId("masterWorkerId")?.value||"");
     const enteredName=(byId("masterWorkerName")?.value||"").trim();
     const status=byId("workerRegisterStatus");
 
@@ -635,7 +656,7 @@ A003" rows="5"></textarea>
 
     try{
       const master=loadMasterDirect();
-      const index=master.workers.findIndex(function(w){return w.id===id;});
+      const index=master.workers.findIndex(function(w){return normalizeId(w.id)===id;});
       const previous=index>=0?master.workers[index]:{};
       const worker={
         id:id,

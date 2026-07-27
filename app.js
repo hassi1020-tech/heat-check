@@ -1504,7 +1504,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.4.3登録専用処理・キャッシュ解除版読込済み。作業員を選択してください。";
+$("guide").textContent="v10.4.4作業員マスタ同期修正版読込済み。作業員を選択してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -1597,8 +1597,18 @@ function renderMaster(){
   renderNotifications();
 }
 
+function normalizeWorkerId(value){
+  return String(value||"")
+    .trim()
+    .replace(/\u3000/g," ")
+    .replace(/\s+/g,"")
+    .toUpperCase();
+}
+
 function fillWorkerFromMaster(){
-  const id=$("workerId")?.value||"";
+  const select=$("workerId");
+  const rawId=select?.value||"";
+  const id=normalizeWorkerId(rawId);
   const summary=$("selectedWorkerSummary");
 
   if(!id){
@@ -1612,18 +1622,49 @@ function fillWorkerFromMaster(){
     return;
   }
 
-  const w=loadMaster().workers.find(x=>x.id===id);
+  const master=loadMaster();
+  let w=master.workers.find(x=>normalizeWorkerId(x.id)===id);
+
+  // 選択欄に存在するのにマスタ検索で見つからない場合は、
+  // 選択肢の表示情報からマスタを自動修復する。
+  if(!w && select){
+    const option=select.options?.[select.selectedIndex];
+    if(option){
+      const label=String(option.textContent||"").trim();
+      const name=label.replace(/（[^）]*）\s*$/,"").trim()||rawId;
+      w={
+        id:rawId.trim(),
+        name,
+        site:"",
+        team:"",
+        workType:"general",
+        workload:"medium",
+        active:true
+      };
+      master.workers=Array.isArray(master.workers)?master.workers:[];
+      master.workers.push(w);
+      saveMaster(master);
+      console.warn("作業員マスタを選択情報から自動修復しました:",w.id);
+    }
+  }
+
   if(!w){
     if(summary){
       summary.className="selected-worker-summary error";
-      summary.textContent="選択した作業員がマスタに見つかりません。設定画面で登録してください。";
+      summary.textContent="作業員情報の読込みに失敗しました。管理一覧で同じIDを再登録してください。";
     }
     return;
   }
 
-  $("workerName").value=w.name||"";
-  $("siteName").value=w.site||"";
-  $("teamName").value=w.team||"";
+  // 表記揺れがあっても、選択値をマスタの正式IDに統一
+  if(select && select.value!==w.id){
+    const matching=[...select.options].find(o=>normalizeWorkerId(o.value)===normalizeWorkerId(w.id));
+    if(matching)select.value=matching.value;
+  }
+
+  if($("workerName"))$("workerName").value=w.name||w.id||"";
+  if($("siteName"))$("siteName").value=w.site||"";
+  if($("teamName"))$("teamName").value=w.team||"";
   if($("workType"))$("workType").value=w.workType||"general";
   if($("workload"))$("workload").value=w.workload||"medium";
 
@@ -1632,7 +1673,6 @@ function fillWorkerFromMaster(){
     summary.textContent=`${w.name||w.id}／${w.site||"現場未設定"}／${w.team||"班未設定"}`;
   }
 }
-
 function addSiteMaster(){
   const value=$("masterSiteName").value.trim();if(!value)return;
   const m=loadMaster();m.sites=uniqueText([...m.sites,value]);saveMaster(m);
@@ -1644,7 +1684,7 @@ function addTeamMaster(){
   $("masterTeamName").value="";
 }
 function addWorkerMaster(){
-  const id=$("masterWorkerId")?.value.trim()||"";
+  const id=normalizeWorkerId($("masterWorkerId")?.value||"");
   const enteredName=$("masterWorkerName")?.value.trim()||"";
 
   if(!id){
@@ -2219,7 +2259,7 @@ try{
   renderNotifications();
   fillWorkerFromMaster();
   syncSimpleCondition();
-  console.info("v10.4.3 登録専用処理・キャッシュ解除版 読込完了");
+  console.info("v10.4.4 作業員マスタ同期修正版 読込完了");
 }catch(err){
   console.error("初期化エラー:",err);
   const summary=document.getElementById("selectedWorkerSummary");
