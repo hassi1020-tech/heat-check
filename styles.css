@@ -111,3 +111,213 @@
   .condition-grid strong{font-size:.95rem}
   .simple-detail-grid{grid-template-columns:1fr}
 }
+
+
+/* =========================================================
+   Ver.11.2 第3段階：管理者ダッシュボード
+   ========================================================= */
+.admin-summary-view{
+  margin-top:18px;
+}
+.section-head{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  align-items:flex-start;
+  margin-bottom:14px;
+}
+.eyebrow{
+  margin:0 0 3px;
+  color:#407277;
+  font-size:.78rem;
+  font-weight:900;
+  letter-spacing:.12em;
+}
+.section-description{
+  margin:4px 0 0;
+  color:#61777b;
+}
+.admin-kpi-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+  margin-bottom:14px;
+}
+.admin-kpi-card{
+  padding:16px;
+  border:1px solid #dce7e7;
+  border-radius:15px;
+  background:#fff;
+  box-shadow:0 5px 16px rgba(20,55,60,.07);
+}
+.admin-kpi-card span{
+  display:block;
+  color:#5f7478;
+  font-size:.88rem;
+  font-weight:700;
+}
+.admin-kpi-card strong{
+  display:inline-block;
+  margin-top:5px;
+  font-size:2rem;
+  line-height:1;
+}
+.admin-kpi-card small{
+  margin-left:4px;
+  color:#5f7478;
+  font-weight:700;
+}
+.admin-panel-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+  margin-bottom:14px;
+}
+.admin-panel{
+  padding:16px;
+  border:1px solid #dce7e7;
+  border-radius:15px;
+  background:#fff;
+}
+.admin-panel h3{
+  margin:0 0 14px;
+}
+.level-summary-list,
+.recent-alert-list{
+  display:grid;
+  gap:8px;
+}
+.level-summary-row,
+.recent-alert-item{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:11px 12px;
+  border-left:7px solid #64748b;
+  border-radius:9px;
+  background:#f6f9f9;
+}
+.level-summary-row.green,
+.recent-alert-item.green{border-color:#16a34a}
+.level-summary-row.yellow,
+.recent-alert-item.yellow{border-color:#eab308}
+.level-summary-row.orange,
+.recent-alert-item.orange{border-color:#ea580c}
+.level-summary-row.red,
+.recent-alert-item.red{border-color:#dc2626}
+.recent-alert-item div{
+  display:grid;
+}
+.recent-alert-item span{
+  color:#677b7f;
+  font-size:.82rem;
+}
+.worker-chart-card{
+  margin-top:12px;
+  padding:14px;
+  border-radius:12px;
+  background:#f5f9f9;
+}
+.worker-card-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+}
+.worker-card-head div{
+  display:grid;
+}
+.worker-card-head strong{
+  font-size:1.2rem;
+}
+.worker-card-head span{
+  margin-top:3px;
+  color:#657a7e;
+}
+.worker-card-stats{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin-top:14px;
+}
+.worker-card-stats div{
+  padding:10px;
+  border-radius:9px;
+  background:#fff;
+}
+.worker-card-stats span{
+  display:block;
+  color:#63787c;
+  font-size:.78rem;
+}
+.worker-card-stats strong{
+  display:block;
+  margin-top:4px;
+}
+.worker-trend{
+  margin-top:14px;
+}
+.worker-trend>span{
+  display:block;
+  margin-bottom:7px;
+  color:#63787c;
+  font-size:.82rem;
+  font-weight:800;
+}
+.worker-trend>div{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+}
+.worker-trend-dot{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  background:#64748b;
+  border:3px solid #fff;
+  box-shadow:0 0 0 1px #cbd5d8;
+}
+.worker-trend-dot.green{background:#16a34a}
+.worker-trend-dot.yellow{background:#eab308}
+.worker-trend-dot.orange{background:#ea580c}
+.worker-trend-dot.red{background:#dc2626}
+.admin-data-buttons{
+  display:grid;
+  gap:10px;
+}
+.file-button{
+  display:block;
+  padding:11px 14px;
+  border:1px solid #8aa4a8;
+  border-radius:10px;
+  text-align:center;
+  background:#fff;
+  color:#264d52;
+  font-weight:900;
+  cursor:pointer;
+}
+.file-button input{
+  display:none;
+}
+.small-note,
+.empty-message{
+  color:#64797d;
+  font-size:.88rem;
+}
+.empty-message{
+  margin:8px 0;
+  text-align:center;
+}
+
+@media(max-width:800px){
+  .admin-kpi-grid{grid-template-columns:1fr 1fr}
+  .admin-panel-grid{grid-template-columns:1fr}
+}
+@media(max-width:500px){
+  .section-head{display:grid}
+  .admin-kpi-grid{gap:8px}
+  .admin-kpi-card{padding:12px}
+  .admin-kpi-card strong{font-size:1.55rem}
+  .worker-card-stats{grid-template-columns:1fr}
+}

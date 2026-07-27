@@ -309,4 +309,326 @@ function init(){
 }
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 init();
-console.info("現場 AIコンディションチェック Ver.11.2 第2段階 読込完了");
+console.info("現場 AIコンディションチェック Ver.11.2 第3段階 読込完了");
+
+/* =========================================================
+   Ver.11.2 第3段階：管理者ダッシュボード・データ管理
+   ========================================================= */
+
+const ADMIN_STORAGE_KEYS = {
+  workers: ["workers", "heatCheckWorkers", "workerMaster"],
+  records: ["records", "measurements", "heatCheckRecords", "measurementHistory"],
+  sites: ["sites", "heatCheckSites", "siteMaster"],
+  teams: ["teams", "heatCheckTeams", "teamMaster"]
+};
+
+function readFirstArray(keys){
+  for(const key of keys){
+    try{
+      const value = JSON.parse(localStorage.getItem(key) || "null");
+      if(Array.isArray(value)) return value;
+    }catch(_){}
+  }
+  return [];
+}
+
+function adminWorkers(){
+  if(typeof loadWorkers === "function"){
+    try{
+      const value = loadWorkers();
+      if(Array.isArray(value)) return value;
+    }catch(_){}
+  }
+  return readFirstArray(ADMIN_STORAGE_KEYS.workers);
+}
+
+function adminRecords(){
+  if(typeof loadRecords === "function"){
+    try{
+      const value = loadRecords();
+      if(Array.isArray(value)) return value;
+    }catch(_){}
+  }
+  return readFirstArray(ADMIN_STORAGE_KEYS.records);
+}
+
+function recordLevel(record){
+  return record.level || record.result?.level || record.judgement || record.status || "green";
+}
+
+function recordDate(record){
+  const raw = record.createdAt || record.date || record.timestamp || record.measuredAt;
+  const date = raw ? new Date(raw) : new Date(0);
+  return Number.isNaN(date.getTime()) ? new Date(0) : date;
+}
+
+function recordWorkerId(record){
+  return String(record.workerId || record.worker?.id || record.workerCode || "");
+}
+
+function recordWorkerName(record){
+  return record.workerName || record.worker?.name || record.name || "未登録";
+}
+
+function recordConfidence(record){
+  const raw = record.confidence ?? record.result?.confidence;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function sameLocalDate(a,b){
+  return a.getFullYear()===b.getFullYear()
+    && a.getMonth()===b.getMonth()
+    && a.getDate()===b.getDate();
+}
+
+function levelLabel(level){
+  return LEVELS[level]?.label || level || "—";
+}
+
+function levelRank(level){
+  return LEVELS[level]?.rank ?? 0;
+}
+
+function formatAdminDate(date){
+  if(!(date instanceof Date) || Number.isNaN(date.getTime())) return "日時不明";
+  return new Intl.DateTimeFormat("ja-JP",{
+    month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"
+  }).format(date);
+}
+
+function renderAdminDashboard(){
+  const records = adminRecords().slice().sort((a,b)=>recordDate(b)-recordDate(a));
+  const workers = adminWorkers();
+  const today = new Date();
+  const todayRecords = records.filter(record=>sameLocalDate(recordDate(record),today));
+  const alertRecords = todayRecords.filter(record=>levelRank(recordLevel(record))>=1);
+  const confidences = todayRecords.map(recordConfidence).filter(v=>v!==null);
+  const average = confidences.length
+    ? Math.round(confidences.reduce((sum,v)=>sum+v,0)/confidences.length)
+    : null;
+
+  const todayEl = $("adminTodayCount");
+  if(!todayEl) return;
+
+  todayEl.textContent = todayRecords.length;
+  $("adminAlertCount").textContent = alertRecords.length;
+  $("adminWorkerCount").textContent = workers.length;
+  $("adminAverageConfidence").textContent = average ?? "—";
+
+  const counts = {green:0,yellow:0,orange:0,red:0};
+  for(const record of todayRecords){
+    const level = recordLevel(record);
+    if(level in counts) counts[level]++;
+  }
+
+  $("adminLevelSummary").innerHTML = Object.entries(counts).map(([level,count])=>`
+    <div class="level-summary-row ${level}">
+      <span>${esc(levelLabel(level))}</span>
+      <strong>${count}件</strong>
+    </div>
+  `).join("");
+
+  const recentAlerts = records
+    .filter(record=>levelRank(recordLevel(record))>=1)
+    .slice(0,8);
+
+  $("adminRecentAlerts").innerHTML = recentAlerts.length
+    ? recentAlerts.map(record=>`
+      <div class="recent-alert-item ${recordLevel(record)}">
+        <div>
+          <strong>${esc(recordWorkerName(record))}</strong>
+          <span>${esc(formatAdminDate(recordDate(record)))}</span>
+        </div>
+        <b>${esc(levelLabel(recordLevel(record)))}</b>
+      </div>
+    `).join("")
+    : '<p class="empty-message">要確認結果はありません。</p>';
+
+  updateAdminWorkerSelect(workers);
+  renderAdminWorkerCard();
+}
+
+function updateAdminWorkerSelect(workers){
+  const select = $("adminWorkerSelect");
+  if(!select) return;
+  const current = select.value;
+  const options = ['<option value="">作業員を選択</option>'];
+
+  workers.forEach((worker,index)=>{
+    const id = String(worker.id || worker.workerId || worker.code || index);
+    const name = worker.name || worker.workerName || `作業員${index+1}`;
+    options.push(`<option value="${esc(id)}">${esc(name)}</option>`);
+  });
+
+  select.innerHTML = options.join("");
+  if([...select.options].some(option=>option.value===current)) select.value=current;
+}
+
+function renderAdminWorkerCard(){
+  const select = $("adminWorkerSelect");
+  const card = $("adminWorkerCard");
+  if(!select || !card) return;
+
+  const workerId = select.value;
+  if(!workerId){
+    card.innerHTML = '<p class="empty-message">作業員を選択してください。</p>';
+    return;
+  }
+
+  const workers = adminWorkers();
+  const worker = workers.find((item,index)=>
+    String(item.id || item.workerId || item.code || index)===workerId
+  );
+
+  const records = adminRecords()
+    .filter(record=>recordWorkerId(record)===workerId)
+    .sort((a,b)=>recordDate(b)-recordDate(a));
+
+  const name = worker?.name || worker?.workerName || records[0]?.workerName || "作業員";
+  const site = worker?.site || worker?.siteName || "—";
+  const team = worker?.team || worker?.teamName || "—";
+  const latest = records[0];
+  const alertCount = records.filter(record=>levelRank(recordLevel(record))>=1).length;
+
+  const trend = records.slice(0,10).reverse();
+  const trendHtml = trend.length
+    ? trend.map(record=>{
+        const level = recordLevel(record);
+        return `<span class="worker-trend-dot ${level}" title="${esc(formatAdminDate(recordDate(record)))}：${esc(levelLabel(level))}"></span>`;
+      }).join("")
+    : '<span class="empty-message">履歴なし</span>';
+
+  card.innerHTML = `
+    <div class="worker-card-head">
+      <div>
+        <strong>${esc(name)}</strong>
+        <span>現場：${esc(site)}／班：${esc(team)}</span>
+      </div>
+      <b>${records.length}回測定</b>
+    </div>
+    <div class="worker-card-stats">
+      <div><span>最新判定</span><strong>${latest ? esc(levelLabel(recordLevel(latest))) : "—"}</strong></div>
+      <div><span>注意以上</span><strong>${alertCount}回</strong></div>
+      <div><span>最新測定</span><strong>${latest ? esc(formatAdminDate(recordDate(latest))) : "—"}</strong></div>
+    </div>
+    <div class="worker-trend">
+      <span>直近10回</span>
+      <div>${trendHtml}</div>
+    </div>
+  `;
+}
+
+function csvCell(value){
+  const text = value==null ? "" : String(value);
+  return `"${text.replace(/"/g,'""')}"`;
+}
+
+function downloadTextFile(filename,text,type){
+  const blob = new Blob([text],{type});
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href=url;
+  anchor.download=filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),500);
+}
+
+function exportAdminCsv(){
+  const records = adminRecords().slice().sort((a,b)=>recordDate(a)-recordDate(b));
+  const header = [
+    "測定日時","作業員ID","作業員名","判定","信頼度",
+    "WBGT","自覚症状","水分補給","測定品質","顔色","左右差","動き"
+  ];
+
+  const rows = records.map(record=>{
+    const indicators = record.indicators || record.result?.indicators || {};
+    return [
+      recordDate(record).toISOString(),
+      recordWorkerId(record),
+      recordWorkerName(record),
+      levelLabel(recordLevel(record)),
+      recordConfidence(record) ?? "",
+      record.wbgt ?? record.result?.wbgt ?? "",
+      record.abnormal ?? record.result?.abnormal ? "あり" : "なし",
+      record.hydration ?? record.result?.hydration ?? "",
+      record.quality ?? record.result?.quality ?? "",
+      indicators.faceColor ?? "",
+      indicators.symmetry ?? "",
+      indicators.movement ?? ""
+    ].map(csvCell).join(",");
+  });
+
+  const csv = "\uFEFF" + [header.map(csvCell).join(","),...rows].join("\r\n");
+  downloadTextFile(
+    `heat-check-records-${new Date().toISOString().slice(0,10)}.csv`,
+    csv,
+    "text/csv;charset=utf-8"
+  );
+}
+
+function exportAdminBackup(){
+  const backup = {
+    app:"現場 AIコンディションチェック",
+    version:"11.2-stage3",
+    exportedAt:new Date().toISOString(),
+    localStorage:{}
+  };
+
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    backup.localStorage[key]=localStorage.getItem(key);
+  }
+
+  downloadTextFile(
+    `heat-check-backup-${new Date().toISOString().slice(0,10)}.json`,
+    JSON.stringify(backup,null,2),
+    "application/json"
+  );
+}
+
+async function importAdminBackup(event){
+  const file=event.target.files?.[0];
+  if(!file) return;
+
+  try{
+    const backup=JSON.parse(await file.text());
+    if(!backup || typeof backup.localStorage!=="object"){
+      throw new Error("バックアップ形式が正しくありません。");
+    }
+
+    const ok=confirm("現在の保存データをバックアップ内容で置き換えます。実行しますか？");
+    if(!ok) return;
+
+    localStorage.clear();
+    Object.entries(backup.localStorage).forEach(([key,value])=>{
+      localStorage.setItem(key,String(value));
+    });
+
+    alert("データを復元しました。画面を再読み込みします。");
+    location.reload();
+  }catch(error){
+    alert(`復元できませんでした：${error.message}`);
+  }finally{
+    event.target.value="";
+  }
+}
+
+function bindAdminDashboard(){
+  $("refreshAdminSummary")?.addEventListener("click",renderAdminDashboard);
+  $("adminWorkerSelect")?.addEventListener("change",renderAdminWorkerCard);
+  $("exportMeasurementsCsv")?.addEventListener("click",exportAdminCsv);
+  $("exportBackupJson")?.addEventListener("click",exportAdminBackup);
+  $("importBackupJson")?.addEventListener("change",importAdminBackup);
+  renderAdminDashboard();
+}
+
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",bindAdminDashboard);
+}else{
+  bindAdminDashboard();
+}
+
+window.addEventListener("storage",renderAdminDashboard);

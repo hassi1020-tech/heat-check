@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <title>現場 AIコンディションチェック Ver.11.2</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1102s2">
-  <link rel="stylesheet" href="styles.css?v=1102s2">
+  <link rel="manifest" href="manifest.webmanifest?v=1102s3">
+  <link rel="stylesheet" href="styles.css?v=1102s3">
 </head>
 <body>
 <header class="app-header">
@@ -118,6 +118,79 @@
       </p>
     </div>
   </article>
+</section>
+
+
+<section id="view-admin-summary" class="view admin-summary-view">
+  <div class="section-head">
+    <div>
+      <p class="eyebrow">ADMIN SUMMARY</p>
+      <h2>管理者ダッシュボード</h2>
+      <p class="section-description">測定結果を現場・作業員・判定別に確認します。</p>
+    </div>
+    <button id="refreshAdminSummary" type="button" class="secondary-button">集計を更新</button>
+  </div>
+
+  <div class="admin-kpi-grid">
+    <article class="admin-kpi-card">
+      <span>本日の測定</span>
+      <strong id="adminTodayCount">0</strong>
+      <small>件</small>
+    </article>
+    <article class="admin-kpi-card">
+      <span>注意以上</span>
+      <strong id="adminAlertCount">0</strong>
+      <small>件</small>
+    </article>
+    <article class="admin-kpi-card">
+      <span>登録作業員</span>
+      <strong id="adminWorkerCount">0</strong>
+      <small>名</small>
+    </article>
+    <article class="admin-kpi-card">
+      <span>平均信頼度</span>
+      <strong id="adminAverageConfidence">—</strong>
+      <small>%</small>
+    </article>
+  </div>
+
+  <div class="admin-panel-grid">
+    <article class="admin-panel">
+      <h3>判定別集計</h3>
+      <div id="adminLevelSummary" class="level-summary-list"></div>
+    </article>
+
+    <article class="admin-panel">
+      <h3>直近の要確認結果</h3>
+      <div id="adminRecentAlerts" class="recent-alert-list"></div>
+    </article>
+  </div>
+
+  <div class="admin-panel-grid">
+    <article class="admin-panel">
+      <h3>作業員別カルテ</h3>
+      <label class="field">
+        <span>作業員</span>
+        <select id="adminWorkerSelect"></select>
+      </label>
+      <div id="adminWorkerCard" class="worker-chart-card">
+        <p class="empty-message">作業員を選択してください。</p>
+      </div>
+    </article>
+
+    <article class="admin-panel">
+      <h3>データ管理</h3>
+      <div class="admin-data-buttons">
+        <button id="exportMeasurementsCsv" type="button" class="primary-button">測定履歴CSV</button>
+        <button id="exportBackupJson" type="button" class="secondary-button">JSONバックアップ</button>
+        <label class="file-button">
+          JSON復元
+          <input id="importBackupJson" type="file" accept=".json,application/json">
+        </label>
+      </div>
+      <p class="small-note">画像・動画は出力されません。数値、判定、入力情報のみを扱います。</p>
+    </article>
+  </div>
 </section>
 
 <section id="view-validation" class="view">
@@ -238,6 +311,6 @@
 <footer>
   Prototype Ver.11.2／非接触スクリーニング。医療診断には使用できません。
 </footer>
-<script src="app.js?v=1102s2"></script>
+<script src="app.js?v=1102s3"></script>
 </body>
 </html>
