@@ -611,44 +611,264 @@ function resultBadge(i){return ["","✅ 通常監視を継続","💧 推奨：�
 function resultAiComment(r,i){const n=r.workerName||r.workerId||"対象者";if(i===4)return `${n}さんは、本人申告または測定条件から非常に高い注意状態です。再測定より先に作業中止と管理者の対面確認を優先してください。`;if(i===3)return `${n}さんは、顔状態または暑熱条件に複数の注意要因があります。作業から離れ、休憩・水分塩分補給・対面確認を行ってください。`;if(i===2)return `${n}さんは、通常時と比べて注意が必要な変化があります。水分・塩分を補給し、作業負荷を調整して再確認してください。`;return `${n}さんは、今回の測定では大きな注意変化は確認されていません。本人の申告を優先しながら通常監視を続けてください。`;}
 function resultActions(i){if(i===4)return [["🚨","作業を中止","涼しい場所へ移動し、本人を一人にしないでください。"],["👷","管理者が直ちに確認","意識・会話・歩行状態を対面確認してください。"],["📞","必要時は緊急対応","重い症状がある場合は現場の緊急手順に従ってください。"]];if(i===3)return [["🧊","涼しい場所で休憩","作業から離れて体温上昇を抑えてください。"],["💧","水分・塩分を補給","少量ずつ確実に補給してください。"],["👷","管理者が本人を確認","改善しない場合は作業へ戻さないでください。"]];if(i===2)return [["💧","水分・塩分を補給","のどが渇く前にこまめに摂取してください。"],["🌤","日陰・涼しい場所で休憩","可能な範囲で作業負荷を下げてください。"],["👷","体調変化を管理者へ報告","めまい・頭痛・吐き気は早めに相談してください。"]];return [["✅","通常監視を継続","今回の測定では大きな注意変化はありません。"],["💧","定期的に水分・塩分補給","本人が異常を感じる前から補給してください。"],["🕒","予定どおり休憩・再測定","現場の測定ルールに従ってください。"]];}
 function setMetricTag(id,text,state){const e=$(id);if(!e)return;e.textContent=text;const card=e.closest('.result-metric');card.classList.remove('good','caution','danger');if(state)card.classList.add(state);}
-function renderResultDashboard(r,score){const i=resultLevelIndex(r,score);$("resultSignal").textContent=resultSignal(i);$("resultLevelText").textContent=resultLevelName(i);$("resultMainTitle").textContent=resultTitle(i);$("resultMainAction").textContent=resultMainAction(i);$("resultAiComment").textContent=resultAiComment(r,i);$("resultRiskScore").innerHTML=`${score}<small>/100</small>`;$("resultRiskLevel").textContent=resultLevelName(i);$("levelBadge").textContent=resultBadge(i);$("levelBadge").className=`result-top-badge ${r.level}`;for(let n=1;n<=4;n++)$("guideLevel"+n)?.classList.toggle('current',n===i);const factors=aiCommentFactors(r,score);$("resultFactorSummary").innerHTML=`<strong>AIが注目した要因：</strong> ${factors.map(esc).join('／')}`;$("resultActionList").innerHTML=resultActions(i).map(a=>`<div class="result-action-item"><span>${a[0]}</span><div><strong>${esc(a[1])}</strong><p>${esc(a[2])}</p></div></div>`).join('');$("resultRecheck").textContent=aiRecheckText(r,score);$("resultManager").textContent=aiManagerText(r,score);$("resultAiWord").textContent=resultAiComment(r,i);setMetricTag('tagColor',r.colorChange>=20?'変化大':r.colorChange>=10?'やや変化':'良好',r.colorChange>=20?'danger':r.colorChange>=10?'caution':'good');setMetricTag('tagQuality',r.quality<45?'注意':r.quality<70?'やや低下':'良好',r.quality<45?'danger':r.quality<70?'caution':'good');setMetricTag('tagAsym',r.asymmetry>=18?'差が大きい':r.asymmetry>=10?'やや差あり':'良好',r.asymmetry>=18?'danger':r.asymmetry>=10?'caution':'good');setMetricTag('tagMotion',r.avgMotion>=4?'動きあり':'良好',r.avgMotion>=4?'caution':'good');setMetricTag('tagFaceMotion',r.avgMotion>=4?'動きあり':'良好',r.avgMotion>=4?'caution':'good');setMetricTag('tagRed',Math.max(r.redScore||0,r.paleScore||0)>=6?'変化あり':'良好',Math.max(r.redScore||0,r.paleScore||0)>=6?'caution':'good');setMetricTag('tagZone',Math.abs(r.rednessChange||0)<3?'良好':'やや変化',Math.abs(r.rednessChange||0)<3?'good':'caution');const symptoms=r.context?.symptoms?Object.values(r.context.symptoms).filter(Boolean).length:0;setMetricTag('tagContext',symptoms?'症状申告あり':r.context?.wbgt!=null?'入力済み':'データなし',symptoms?'danger':r.context?.wbgt>=28?'caution':r.context?.wbgt!=null?'good':'');}
+function resultSafeText(id,text){
+  const el=$(id);
+  if(el)el.textContent=text;
+}
+
+function resultSafeHtml(id,html){
+  const el=$(id);
+  if(el)el.innerHTML=html;
+}
+
+function resultSymptomCount(context){
+  const symptoms=context?.symptoms;
+  if(!symptoms)return 0;
+  if(Array.isArray(symptoms))return symptoms.filter(Boolean).length;
+  if(typeof symptoms==="object")return Object.values(symptoms).filter(Boolean).length;
+  return String(symptoms)==="なし"?0:1;
+}
+
+function resultFactorList(r,score){
+  try{
+    const factors=aiCommentFactors(r,score);
+    if(Array.isArray(factors)&&factors.length)return factors;
+  }catch(err){
+    console.warn("AI factor fallback:",err);
+  }
+
+  const factors=[];
+  const wbgt=Number(r.context?.wbgt);
+  if(Number.isFinite(wbgt))factors.push(`WBGT ${wbgt.toFixed(1)}`);
+  else factors.push("WBGT未入力");
+
+  const color=Number(r.colorChange);
+  if(Number.isFinite(color))factors.push(`顔色変化 ${color.toFixed(1)}`);
+
+  const quality=Number(r.quality);
+  if(Number.isFinite(quality))factors.push(`映像品質 ${Math.round(quality)}`);
+
+  const asym=Number(r.asymmetry);
+  if(Number.isFinite(asym))factors.push(`左右差 ${asym.toFixed(1)}`);
+
+  return factors;
+}
+
+function renderResultDashboard(r,score){
+  const safeScore=Number.isFinite(Number(score))?Math.round(Number(score)):0;
+  const i=resultLevelIndex(r,safeScore);
+
+  resultSafeText("resultSignal",resultSignal(i));
+  resultSafeText("resultLevelText",resultLevelName(i));
+  resultSafeText("resultMainTitle",resultTitle(i));
+  resultSafeText("resultMainAction",resultMainAction(i));
+  resultSafeText("resultAiComment",resultAiComment(r,i));
+  resultSafeHtml("resultRiskScore",`${safeScore}<small>/100</small>`);
+  resultSafeText("resultRiskLevel",resultLevelName(i));
+  resultSafeText("levelBadge",resultBadge(i));
+
+  const badge=$("levelBadge");
+  if(badge)badge.className=`result-top-badge ${r.level||"green"}`;
+
+  for(let n=1;n<=4;n++){
+    const guide=$("guideLevel"+n);
+    if(guide)guide.classList.toggle("current",n===i);
+  }
+
+  const factors=resultFactorList(r,safeScore);
+  resultSafeHtml(
+    "resultFactorSummary",
+    `<strong>AIが注目した要因：</strong> ${factors.map(esc).join("／")}`
+  );
+
+  const actionBox=$("resultActionList");
+  if(actionBox){
+    actionBox.innerHTML=resultActions(i).map(a=>`
+      <div class="result-action-item">
+        <span>${a[0]}</span>
+        <div><strong>${esc(a[1])}</strong><p>${esc(a[2])}</p></div>
+      </div>
+    `).join("");
+  }
+
+  let recheck="通常の測定予定時刻";
+  let manager="体調変化がある場合に連絡";
+  try{recheck=aiRecheckText(r,safeScore);}catch{}
+  try{manager=aiManagerText(r,safeScore);}catch{}
+  resultSafeText("resultRecheck",recheck);
+  resultSafeText("resultManager",manager);
+  resultSafeText("resultAiWord",resultAiComment(r,i));
+
+  const color=Number(r.colorChange);
+  const quality=Number(r.quality);
+  const asym=Number(r.asymmetry);
+  const motion=Number(r.avgMotion);
+  const redPale=Math.max(Number(r.redScore)||0,Number(r.paleScore)||0);
+  const redness=Math.abs(Number(r.rednessChange)||0);
+
+  setMetricTag(
+    "tagColor",
+    color>=20?"変化大":color>=10?"やや変化":"良好",
+    color>=20?"danger":color>=10?"caution":"good"
+  );
+  setMetricTag(
+    "tagQuality",
+    quality<45?"注意":quality<70?"やや低下":"良好",
+    quality<45?"danger":quality<70?"caution":"good"
+  );
+  setMetricTag(
+    "tagAsym",
+    asym>=18?"差が大きい":asym>=10?"やや差あり":"良好",
+    asym>=18?"danger":asym>=10?"caution":"good"
+  );
+  setMetricTag(
+    "tagMotion",
+    motion>=4?"動きあり":"良好",
+    motion>=4?"caution":"good"
+  );
+  setMetricTag(
+    "tagFaceMotion",
+    motion>=4?"動きあり":"良好",
+    motion>=4?"caution":"good"
+  );
+  setMetricTag(
+    "tagRed",
+    redPale>=6?"変化あり":"良好",
+    redPale>=6?"caution":"good"
+  );
+  setMetricTag(
+    "tagZone",
+    redness<3?"良好":"やや変化",
+    redness<3?"good":"caution"
+  );
+
+  const symptoms=resultSymptomCount(r.context);
+  const wbgt=Number(r.context?.wbgt);
+  setMetricTag(
+    "tagContext",
+    symptoms>0?"症状申告あり":Number.isFinite(wbgt)?"入力済み":"データなし",
+    symptoms>0?"danger":wbgt>=28?"caution":Number.isFinite(wbgt)?"good":""
+  );
+
+  const card=$("resultCard");
+  if(card){
+    card.classList.remove("result-level-green","result-level-yellow","result-level-orange","result-level-red");
+    card.classList.add(`result-level-${r.level||"green"}`);
+  }
+}
 
 function showResult(r){
-  $("resultCard").classList.remove("hidden");
-  $("resultTime").textContent=new Date(r.timestamp).toLocaleString("ja-JP");
-  $("levelBadge").className="badge "+r.level;
-  $("levelBadge").textContent=r.label;
-  $("resultBpm").textContent=`${r.colorChangeLabel}（${r.colorChange.toFixed(1)}）`;
-  $("resultDelta").textContent=r.redScore>r.paleScore
-    ?`赤み傾向 ${r.redScore.toFixed(1)}`
-    :r.paleScore>0?`青白さ傾向 ${r.paleScore.toFixed(1)}`:"目立つ変化なし";
-  $("resultRedness").textContent=Math.abs(r.rednessChange)<3?"通常域":r.rednessChange>0?"赤み増加":"赤み低下";
-  $("resultMotion").textContent=r.motionLabel;
-  $("resultQuality").textContent=`${r.qualityLabel}（${Math.round(r.quality)}）`;
-  $("resultBaseline").textContent=`${r.asymmetryLabel}（${r.asymmetry.toFixed(1)}）`;
-  $("resultStability").textContent=`${r.motionLabel}（${r.avgMotion.toFixed(1)}）`;
-  const wbgtText=r.context?.wbgt!==null&&r.context?.wbgt!==undefined?`WBGT ${r.context.wbgt}`:"WBGT未入力";
-  const symptomN=r.context?.symptoms?Object.values(r.context.symptoms).filter(Boolean).length:0;
-  $("resultContext").textContent=`${wbgtText}・症状${symptomN}件`;
-  if($("facePosition"))$("facePosition").textContent=r.positionLabel;
-  if($("lightingStatus"))$("lightingStatus").textContent=r.lightingLabel;
-  const history=records().filter(x=>x.workerId===r.workerId);
-  const riskScore=numericRiskScore(r,history);
-  r.riskScore=riskScore;
-  renderResultDashboard(r,riskScore);
-  const forecast=workerRiskForecast(r.workerId,[...history,r]);
-  if($("riskScoreStatus"))$("riskScoreStatus").textContent=`${riskScore}/100`;
-  if($("forecastStatus"))$("forecastStatus").textContent=forecast.status;
-  if($("trackingStatus"))$("trackingStatus").textContent=(r.trackingRate||0)>=70?"追従良好":(r.trackingRate||0)>=35?"追従注意":"固定枠方式";
-  if($("poseStatus"))$("poseStatus").textContent=r.poseLabel||"未確認";
-  if($("blinkStatus"))$("blinkStatus").textContent=r.blinkLabel||"未確認";
-  if($("baselineStatus")){
-    if(r.baseline){
-      const d=Math.abs(r.colorChange-r.baseline.colorChange);
-      $("baselineStatus").textContent=d<3?"通常範囲":d<6?"やや変化":"大きな変化";
-    }else $("baselineStatus").textContent="未登録";
+  const resultCard=$("resultCard");
+  if(!resultCard||!r){
+    console.error("結果表示に必要な要素または測定データがありません。");
+    return;
   }
-  $("instruction").textContent=r.instruction;
+
+  resultCard.classList.remove("hidden");
+
+  const timestamp=r.timestamp?new Date(r.timestamp):new Date();
+  resultSafeText("resultTime",timestamp.toLocaleString("ja-JP"));
+
+  const colorChange=Number(r.colorChange);
+  const redScore=Number(r.redScore)||0;
+  const paleScore=Number(r.paleScore)||0;
+  const rednessChange=Number(r.rednessChange)||0;
+  const quality=Number(r.quality);
+  const asymmetry=Number(r.asymmetry);
+  const avgMotion=Number(r.avgMotion);
+
+  resultSafeText(
+    "resultBpm",
+    `${r.colorChangeLabel||"顔色変化"}（${Number.isFinite(colorChange)?colorChange.toFixed(1):"--"}）`
+  );
+  resultSafeText(
+    "resultDelta",
+    redScore>paleScore
+      ?`赤み傾向 ${redScore.toFixed(1)}`
+      :paleScore>0
+        ?`青白さ傾向 ${paleScore.toFixed(1)}`
+        :"目立つ変化なし"
+  );
+  resultSafeText(
+    "resultRedness",
+    Math.abs(rednessChange)<3?"通常域":rednessChange>0?"赤み増加":"赤み低下"
+  );
+  resultSafeText("resultMotion",r.motionLabel||"未評価");
+  resultSafeText(
+    "resultQuality",
+    `${r.qualityLabel||"未評価"}（${Number.isFinite(quality)?Math.round(quality):"--"}）`
+  );
+  resultSafeText(
+    "resultBaseline",
+    `${r.asymmetryLabel||"未評価"}（${Number.isFinite(asymmetry)?asymmetry.toFixed(1):"--"}）`
+  );
+  resultSafeText(
+    "resultStability",
+    `${r.motionLabel||"未評価"}（${Number.isFinite(avgMotion)?avgMotion.toFixed(1):"--"}）`
+  );
+
+  const wbgt=Number(r.context?.wbgt);
+  const symptomN=resultSymptomCount(r.context);
+  resultSafeText(
+    "resultContext",
+    `${Number.isFinite(wbgt)?`WBGT ${wbgt.toFixed(1)}`:"WBGT未入力"}・症状${symptomN}件`
+  );
+
+  resultSafeText("facePosition",r.positionLabel||"未確認");
+  resultSafeText("lightingStatus",r.lightingLabel||"未確認");
+
+  let riskScore=20;
+  try{
+    const history=records().filter(x=>x.workerId===r.workerId);
+    riskScore=numericRiskScore(r,history);
+  }catch(err){
+    console.warn("危険度スコアの簡易計算へ切替:",err);
+    riskScore=({green:18,yellow:46,orange:70,red:90})[r.level]??20;
+  }
+
+  r.riskScore=riskScore;
+
+  try{
+    renderResultDashboard(r,riskScore);
+  }catch(err){
+    console.error("結果ダッシュボード描画エラー:",err);
+    resultSafeText("resultMainTitle",r.label||"測定結果");
+    resultSafeText("resultMainAction",r.instruction||"本人の体調を確認してください。");
+    resultSafeHtml("resultRiskScore",`${riskScore}<small>/100</small>`);
+    resultSafeText("resultRiskLevel",resultLevelName(resultLevelIndex(r,riskScore)));
+  }
+
+  try{
+    const history=records().filter(x=>x.workerId===r.workerId);
+    const forecast=workerRiskForecast(r.workerId,[...history,r]);
+    resultSafeText("riskScoreStatus",`${riskScore}/100`);
+    resultSafeText("forecastStatus",forecast.status);
+  }catch{
+    resultSafeText("riskScoreStatus",`${riskScore}/100`);
+    resultSafeText("forecastStatus","今回結果を確認");
+  }
+
+  resultSafeText(
+    "trackingStatus",
+    (Number(r.trackingRate)||0)>=70?"追従良好":
+    (Number(r.trackingRate)||0)>=35?"追従注意":"固定枠方式"
+  );
+  resultSafeText("poseStatus",r.poseLabel||"未確認");
+  resultSafeText("blinkStatus",r.blinkLabel||"未確認");
+
+  const baselineStatus=$("baselineStatus");
+  if(baselineStatus){
+    if(r.baseline&&Number.isFinite(colorChange)){
+      const baseColor=Number(r.baseline.colorChange);
+      const d=Number.isFinite(baseColor)?Math.abs(colorChange-baseColor):0;
+      baselineStatus.textContent=d<3?"通常範囲":d<6?"やや変化":"大きな変化";
+    }else{
+      baselineStatus.textContent="未登録";
+    }
+  }
+
+  resultSafeText("instruction",r.instruction||"本人の体調申告と管理者の判断を優先してください。");
+  resultCard.scrollIntoView({behavior:"smooth",block:"start"});
 }
 
 $("saveResult").addEventListener("click",()=>{
@@ -1141,7 +1361,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.3プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v10.3.1修正版読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))

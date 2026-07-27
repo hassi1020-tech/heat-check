@@ -1,641 +1,546 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
-  <title>現場 顔動画コンディションチェック</title>
-  <link rel="manifest" href="manifest.webmanifest?v=103">
-  <link rel="stylesheet" href="styles.css?v=103">
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
+<meta content="#0f172a" name="theme-color"/>
+<title>現場 顔動画コンディションチェック</title>
+<link href="manifest.webmanifest?v=1031" rel="manifest"/>
+<link href="styles.css?v=1031" rel="stylesheet"/>
 </head>
 <body>
 <header>
-  <div>
-    <h1>現場 顔動画コンディションチェック</h1>
-    <p>非接触スクリーニングMVP（医療診断ではありません）</p>
-  </div>
-  <nav>
-    <button class="nav active" data-view="check">測定</button>
-    <button class="nav" data-view="dashboard">管理一覧</button>
-    <button class="nav" data-view="settings">設定</button>
-  </nav>
+<div>
+<h1>現場 顔動画コンディションチェック</h1>
+<p>非接触スクリーニングMVP（医療診断ではありません）</p>
+</div>
+<nav>
+<button class="nav active" data-view="check">測定</button>
+<button class="nav" data-view="dashboard">管理一覧</button>
+<button class="nav" data-view="settings">設定</button>
+</nav>
 </header>
-
 <main>
-<section id="check" class="view active">
-  <div class="card form-grid">
-    <label>作業員ID
-      <input id="workerId" list="workerIdList" autocomplete="off" placeholder="例：A001">
-      <datalist id="workerIdList"></datalist>
-    </label>
-    <label>作業員名
-      <input id="workerName" autocomplete="off" placeholder="例：山田 太郎">
-    </label>
-    <label>現場名
-      <input id="siteName" list="siteNameList" autocomplete="off" placeholder="例：○○ポンプ所">
-      <datalist id="siteNameList"></datalist>
-    </label>
-    <label>作業班
-      <input id="teamName" list="teamNameList" autocomplete="off" placeholder="例：機械班">
-      <datalist id="teamNameList"></datalist>
-    </label>
-    <label>作業内容
+<section class="view active" id="check">
+<div class="card form-grid">
+<label>作業員ID
+      <input autocomplete="off" id="workerId" list="workerIdList" placeholder="例：A001"/>
+<datalist id="workerIdList"></datalist>
+</label>
+<label>作業員名
+      <input autocomplete="off" id="workerName" placeholder="例：山田 太郎"/>
+</label>
+<label>現場名
+      <input autocomplete="off" id="siteName" list="siteNameList" placeholder="例：○○ポンプ所"/>
+<datalist id="siteNameList"></datalist>
+</label>
+<label>作業班
+      <input autocomplete="off" id="teamName" list="teamNameList" placeholder="例：機械班"/>
+<datalist id="teamNameList"></datalist>
+</label>
+<label>作業内容
       <select id="workType">
-        <option value="general">一般作業</option>
-        <option value="light">軽作業・監視</option>
-        <option value="electrical">電気・計装</option>
-        <option value="piping">配管・機械据付</option>
-        <option value="scaffold">足場・高所</option>
-        <option value="civil">土木・掘削</option>
-        <option value="welding">溶接・火気</option>
-        <option value="confined">槽内・閉所</option>
-      </select>
-    </label>
-    <label>測定区分
+<option value="general">一般作業</option>
+<option value="light">軽作業・監視</option>
+<option value="electrical">電気・計装</option>
+<option value="piping">配管・機械据付</option>
+<option value="scaffold">足場・高所</option>
+<option value="civil">土木・掘削</option>
+<option value="welding">溶接・火気</option>
+<option value="confined">槽内・閉所</option>
+</select>
+</label>
+<label>測定区分
       <select id="timing">
-        <option>朝礼前</option>
-        <option>10時休憩</option>
-        <option>昼休憩後</option>
-        <option>15時休憩</option>
-        <option>作業中</option>
-        <option>休憩後再測定</option>
-      </select>
-    </label>
-  </div>
-
-
-  <div class="card">
-    <h2 class="subhead">現場条件・本人申告</h2>
-    <div class="form-grid">
-      <label>WBGT（任意）
-        <input id="wbgt" type="number" min="0" max="50" step="0.1" placeholder="例：28.5">
-      </label>
-      <label>作業強度
+<option>朝礼前</option>
+<option>10時休憩</option>
+<option>昼休憩後</option>
+<option>15時休憩</option>
+<option>作業中</option>
+<option>休憩後再測定</option>
+</select>
+</label>
+</div>
+<div class="card">
+<h2 class="subhead">現場条件・本人申告</h2>
+<div class="form-grid">
+<label>WBGT（任意）
+        <input id="wbgt" max="50" min="0" placeholder="例：28.5" step="0.1" type="number"/>
+</label>
+<label>作業強度
         <select id="workload">
-          <option value="low">軽作業</option>
-          <option value="medium" selected>中作業</option>
-          <option value="high">重作業</option>
-        </select>
-      </label>
-      <label>直近30分の水分補給
+<option value="low">軽作業</option>
+<option selected="" value="medium">中作業</option>
+<option value="high">重作業</option>
+</select>
+</label>
+<label>直近30分の水分補給
         <select id="hydration">
-          <option value="yes">あり</option>
-          <option value="little">少量</option>
-          <option value="no">なし</option>
-        </select>
-      </label>
-      <label>体調申告
+<option value="yes">あり</option>
+<option value="little">少量</option>
+<option value="no">なし</option>
+</select>
+</label>
+<label>体調申告
         <select id="selfCondition">
-          <option value="normal">異常なし</option>
-          <option value="slight">少し気になる</option>
-          <option value="bad">明らかに体調が悪い</option>
-        </select>
-      </label>
-    </div>
-    <div class="symptoms">
-      <label><input type="checkbox" id="symDizzy"> めまい・ふらつき</label>
-      <label><input type="checkbox" id="symNausea"> 吐き気・頭痛</label>
-      <label><input type="checkbox" id="symCramp"> 筋肉のけいれん</label>
-      <label><input type="checkbox" id="symConfusion"> 受け答えがおかしい</label>
-    </div>
-  </div>
-
-  <div class="card camera-card">
-    
-    <div class="measure-status-grid">
-      <div><span>顔位置</span><strong id="facePosition">未確認</strong></div>
-      <div><span>照明状態</span><strong id="lightingStatus">未確認</strong></div>
-      <div><span>過去平均との差</span><strong id="baselineStatus">未登録</strong></div>
-      <div><span>顔追従</span><strong id="trackingStatus">準備前</strong></div>
-      <div><span>顔の傾き</span><strong id="poseStatus">未確認</strong></div>
-      <div><span>まばたき</span><strong id="blinkStatus">未確認</strong></div>
-      <div><span>危険度スコア</span><strong id="riskScoreStatus">--</strong></div>
-      <div><span>悪化傾向</span><strong id="forecastStatus">未評価</strong></div>
-    </div>
+<option value="normal">異常なし</option>
+<option value="slight">少し気になる</option>
+<option value="bad">明らかに体調が悪い</option>
+</select>
+</label>
+</div>
+<div class="symptoms">
+<label><input id="symDizzy" type="checkbox"/> めまい・ふらつき</label>
+<label><input id="symNausea" type="checkbox"/> 吐き気・頭痛</label>
+<label><input id="symCramp" type="checkbox"/> 筋肉のけいれん</label>
+<label><input id="symConfusion" type="checkbox"/> 受け答えがおかしい</label>
+</div>
+</div>
+<div class="card camera-card">
+<div class="measure-status-grid">
+<div><span>顔位置</span><strong id="facePosition">未確認</strong></div>
+<div><span>照明状態</span><strong id="lightingStatus">未確認</strong></div>
+<div><span>過去平均との差</span><strong id="baselineStatus">未登録</strong></div>
+<div><span>顔追従</span><strong id="trackingStatus">準備前</strong></div>
+<div><span>顔の傾き</span><strong id="poseStatus">未確認</strong></div>
+<div><span>まばたき</span><strong id="blinkStatus">未確認</strong></div>
+<div><span>危険度スコア</span><strong id="riskScoreStatus">--</strong></div>
+<div><span>悪化傾向</span><strong id="forecastStatus">未評価</strong></div>
+</div>
 <div class="camera-wrap">
-      <video id="video" playsinline muted></video>
-      <canvas id="overlay"></canvas>
-      <div id="guide">顔を枠内に入れ、できるだけ動かないでください</div>
-    </div>
-    <div class="meter-row">
-      <div><span>残り</span><strong id="countdown">準備</strong></div>
-      <div><span>映像品質</span><strong id="quality">未測定</strong></div>
-      <div><span>顔の動き</span><strong id="stability">--</strong></div>
-      <div><span>顔色変化</span><strong id="bpmLive">--</strong></div>
-    </div>
-    <div class="actions">
-      <button id="startCamera">カメラ開始</button>
-      <button id="startMeasure" class="primary" type="button" disabled>測定開始</button>
-      <button id="stopCamera" disabled>カメラ停止</button>
-    </div>
-    <p class="note">通常カメラの映像から顔周辺の色変化・動き・明るさを解析します。照明、日焼け、汗、マスク、カメラ性能で結果が変わります。</p>
-  </div>
-
-  <div id="resultCard" class="card result-card-v103 hidden">
-    <div class="result-v103-head">
-      <div><h2>判定結果</h2><p id="resultTime"></p></div>
-      <div id="levelBadge" class="result-top-badge">測定待ち</div>
-    </div>
-
-    <div class="result-v103-hero">
-      <section class="result-condition-card">
-        <div class="result-status-area">
-          <div id="resultSignal" class="result-face-icon">⚪</div>
-          <div>
-            <span id="resultLevelText" class="result-level-pill">測定待ち</span>
-            <h3 id="resultMainTitle">測定結果を待っています</h3>
-            <strong id="resultMainAction" class="result-main-action">測定完了後に推奨対応を表示します</strong>
-          </div>
-        </div>
-        <div class="result-ai-comment">
-          <h3>AIコンディション評価</h3>
-          <p id="resultAiComment">顔状態、WBGT、本人申告などを組み合わせてコメントを表示します。</p>
-        </div>
-      </section>
-
-      <section class="result-score-card">
-        <div class="score-main"><span>危険度スコア</span><strong id="resultRiskScore">--<small>/100</small></strong><em id="resultRiskLevel">測定待ち</em></div>
-        <div class="score-guide">
-          <h3>判定レベルの目安</h3>
-          <div id="guideLevel1" class="guide-line guide1"><b>レベル1</b><span>良好</span><small>0～34</small></div>
-          <div id="guideLevel2" class="guide-line guide2"><b>レベル2</b><span>注意</span><small>35～59</small></div>
-          <div id="guideLevel3" class="guide-line guide3"><b>レベル3</b><span>要休憩</span><small>60～79</small></div>
-          <div id="guideLevel4" class="guide-line guide4"><b>レベル4</b><span>危険</span><small>80～100</small></div>
-        </div>
-      </section>
-    </div>
-
-    <div class="result-v103-details">
-      <section class="result-reason-card">
-        <h3>判定理由（AI分析のポイント）</h3>
-        <div class="result-metric-grid">
-          <div class="result-metric"><span>🙂</span><div><small>顔色変化</small><strong id="resultBpm">--</strong><em id="tagColor">未測定</em></div></div>
-          <div class="result-metric"><span>🩸</span><div><small>赤み傾向</small><strong id="resultDelta">--</strong><em id="tagRed">未測定</em></div></div>
-          <div class="result-metric"><span>◉</span><div><small>顔色の領域</small><strong id="resultRedness">--</strong><em id="tagZone">未測定</em></div></div>
-          <div class="result-metric"><span>🏃</span><div><small>動き</small><strong id="resultMotion">--</strong><em id="tagMotion">未測定</em></div></div>
-          <div class="result-metric"><span>📷</span><div><small>映像品質</small><strong id="resultQuality">--</strong><em id="tagQuality">未測定</em></div></div>
-          <div class="result-metric"><span>↔</span><div><small>左右差</small><strong id="resultBaseline">--</strong><em id="tagAsym">未測定</em></div></div>
-          <div class="result-metric"><span>〰</span><div><small>顔の動き</small><strong id="resultStability">--</strong><em id="tagFaceMotion">未測定</em></div></div>
-          <div class="result-metric metric-context"><span>🌡</span><div><small>WBGT・本人申告</small><strong id="resultContext">--</strong><em id="tagContext">未入力</em></div></div>
-        </div>
-        <div id="resultFactorSummary" class="result-factor-summary"></div>
-      </section>
-
-      <section class="result-action-card">
-        <h3>今やること（推奨アクション）</h3>
-        <div id="resultActionList" class="result-action-list"></div>
-        <div class="result-followup">
-          <div><span>再確認の目安</span><strong id="resultRecheck">--</strong></div>
-          <div><span>管理者への連絡</span><strong id="resultManager">--</strong></div>
-        </div>
-      </section>
-    </div>
-
-    <div class="result-ai-word"><strong>🤖 AIからのひとこと</strong><span id="resultAiWord">測定後にコメントを表示します。</span><b id="resultSafetyWord">安全第一で作業してください</b></div>
-    <div id="instruction" class="result-caution-note"></div>
-    <p class="result-disclaimer">この結果はAIによるコンディション評価です。医療診断ではありません。本人の体調申告と管理者の判断を優先してください。</p>
-    <div class="actions result-buttons"><button id="saveResult" class="primary">結果を保存</button><button id="remeasure">再測定する</button></div>
-  </div>
+<video id="video" muted="" playsinline=""></video>
+<canvas id="overlay"></canvas>
+<div id="guide">顔を枠内に入れ、できるだけ動かないでください</div>
+</div>
+<div class="meter-row">
+<div><span>残り</span><strong id="countdown">準備</strong></div>
+<div><span>映像品質</span><strong id="quality">未測定</strong></div>
+<div><span>顔の動き</span><strong id="stability">--</strong></div>
+<div><span>顔色変化</span><strong id="bpmLive">--</strong></div>
+</div>
+<div class="actions">
+<button id="startCamera">カメラ開始</button>
+<button class="primary" disabled="" id="startMeasure" type="button">測定開始</button>
+<button disabled="" id="stopCamera">カメラ停止</button>
+</div>
+<p class="note">通常カメラの映像から顔周辺の色変化・動き・明るさを解析します。照明、日焼け、汗、マスク、カメラ性能で結果が変わります。</p>
+</div>
+<div class="card result-card-v103 hidden" id="resultCard">
+<div class="result-v103-head">
+<div><h2>判定結果</h2><p id="resultTime"></p></div>
+<div class="result-top-badge" id="levelBadge">測定待ち</div>
+</div>
+<div class="result-v103-hero">
+<section class="result-condition-card">
+<div class="result-status-area">
+<div class="result-face-icon" id="resultSignal">⚪</div>
+<div>
+<span class="result-level-pill" id="resultLevelText">測定待ち</span>
+<h3 id="resultMainTitle">測定結果を待っています</h3>
+<strong class="result-main-action" id="resultMainAction">測定完了後に推奨対応を表示します</strong>
+</div>
+</div>
+<div class="result-ai-comment">
+<h3>AIコンディション評価</h3>
+<p id="resultAiComment">顔状態、WBGT、本人申告などを組み合わせてコメントを表示します。</p>
+</div>
 </section>
-
-<section id="dashboard" class="view">
-  <div class="card">
-    <div class="toolbar">
-      <div>
-        <h2>管理一覧</h2>
-        <p>第三者が測定状況と必要対応を確認できます。</p>
-      </div>
-      <div class="actions compact">
-        <button id="exportCsv">CSV出力</button>
-        <button id="clearData" class="danger">全件削除</button>
-      </div>
-    </div>
-    <div class="summary" id="summary"></div>
-    
-    <div class="summary-grid">
-      <div class="summary-card"><span>本日測定</span><strong id="sumTotal">0</strong></div>
-      <div class="summary-card green"><span>緑</span><strong id="sumGreen">0</strong></div>
-      <div class="summary-card yellow"><span>黄</span><strong id="sumYellow">0</strong></div>
-      <div class="summary-card orange"><span>橙</span><strong id="sumOrange">0</strong></div>
-      <div class="summary-card red"><span>赤</span><strong id="sumRed">0</strong></div>
-    </div>
-
-    
-    
-    
-    
-    
-    
-    <div id="aiResultPanel" class="decision-panel result-hidden" aria-live="polite">
-      <div class="decision-main">
-        <div id="decisionSignal" class="decision-signal">⚪</div>
-        <div class="decision-title-wrap">
-          <span id="decisionLevel" class="decision-level">測定待ち</span>
-          <h2 id="aiResultTitle">測定結果を待っています</h2>
-          <div id="decisionPrimaryAction" class="decision-primary-action">
-            測定完了後、ここに最優先行動を表示します。
-          </div>
-        </div>
-        <div id="aiResultScore" class="decision-score">--<small>/100</small></div>
-      </div>
-
-      <div id="aiResultSummary" class="decision-summary">
-        測定完了後、AIコンディション評価を表示します。
-      </div>
-
-      <div class="decision-content-grid">
-        <section class="decision-card">
-          <h3>判定理由</h3>
-          <div id="aiResultFactors" class="decision-list">
-            <div>まだ測定されていません。</div>
-          </div>
-        </section>
-
-        <section class="decision-card action-card">
-          <h3>今やること</h3>
-          <div id="aiResultActions" class="decision-action-list">
-            <div>測定後に推奨対応を表示します。</div>
-          </div>
-        </section>
-      </div>
-
-      <div class="decision-meta-grid">
-        <div>
-          <span>再確認の目安</span>
-          <strong id="aiResultRecheck">--</strong>
-        </div>
-        <div>
-          <span>管理者への連絡</span>
-          <strong id="aiResultManager">--</strong>
-        </div>
-      </div>
-
-      <div id="aiResultWarning" class="decision-warning">
-        この結果はAIによるコンディション評価です。本人の体調申告と管理者の判断を優先してください。
-      </div>
-    </div>
+<section class="result-score-card">
+<div class="score-main"><span>危険度スコア</span><strong id="resultRiskScore">--<small>/100</small></strong><em id="resultRiskLevel">測定待ち</em></div>
+<div class="score-guide">
+<h3>判定レベルの目安</h3>
+<div class="guide-line guide1" id="guideLevel1"><b>レベル1</b><span>良好</span><small>0～34</small></div>
+<div class="guide-line guide2" id="guideLevel2"><b>レベル2</b><span>注意</span><small>35～59</small></div>
+<div class="guide-line guide3" id="guideLevel3"><b>レベル3</b><span>要休憩</span><small>60～79</small></div>
+<div class="guide-line guide4" id="guideLevel4"><b>レベル4</b><span>危険</span><small>80～100</small></div>
+</div>
+</section>
+</div>
+<div class="result-v103-details">
+<section class="result-reason-card">
+<h3>判定理由（AI分析のポイント）</h3>
+<div class="result-metric-grid">
+<div class="result-metric"><span>🙂</span><div><small>顔色変化</small><strong id="resultBpm">--</strong><em id="tagColor">未測定</em></div></div>
+<div class="result-metric"><span>🩸</span><div><small>赤み傾向</small><strong id="resultDelta">--</strong><em id="tagRed">未測定</em></div></div>
+<div class="result-metric"><span>◉</span><div><small>顔色の領域</small><strong id="resultRedness">--</strong><em id="tagZone">未測定</em></div></div>
+<div class="result-metric"><span>🏃</span><div><small>動き</small><strong id="resultMotion">--</strong><em id="tagMotion">未測定</em></div></div>
+<div class="result-metric"><span>📷</span><div><small>映像品質</small><strong id="resultQuality">--</strong><em id="tagQuality">未測定</em></div></div>
+<div class="result-metric"><span>↔</span><div><small>左右差</small><strong id="resultBaseline">--</strong><em id="tagAsym">未測定</em></div></div>
+<div class="result-metric"><span>〰</span><div><small>顔の動き</small><strong id="resultStability">--</strong><em id="tagFaceMotion">未測定</em></div></div>
+<div class="result-metric metric-context"><span>🌡</span><div><small>WBGT・本人申告</small><strong id="resultContext">--</strong><em id="tagContext">未入力</em></div></div>
+</div>
+<div class="result-factor-summary" id="resultFactorSummary"></div>
+</section>
+<section class="result-action-card">
+<h3>今やること（推奨アクション）</h3>
+<div class="result-action-list" id="resultActionList"></div>
+<div class="result-followup">
+<div><span>再確認の目安</span><strong id="resultRecheck">--</strong></div>
+<div><span>管理者への連絡</span><strong id="resultManager">--</strong></div>
+</div>
+</section>
+</div>
+<div class="result-ai-word"><strong>🤖 AIからのひとこと</strong><span id="resultAiWord">測定後にコメントを表示します。</span><b id="resultSafetyWord">安全第一で作業してください</b></div>
+<div class="result-caution-note" id="instruction"></div>
+<p class="result-disclaimer">この結果はAIによるコンディション評価です。医療診断ではありません。本人の体調申告と管理者の判断を優先してください。</p>
+<div class="actions result-buttons"><button class="primary" id="saveResult">結果を保存</button><button id="remeasure">再測定する</button></div>
+</div>
+</section>
+<section class="view" id="dashboard">
+<div class="card">
+<div class="toolbar">
+<div>
+<h2>管理一覧</h2>
+<p>第三者が測定状況と必要対応を確認できます。</p>
+</div>
+<div class="actions compact">
+<button id="exportCsv">CSV出力</button>
+<button class="danger" id="clearData">全件削除</button>
+</div>
+</div>
+<div class="summary" id="summary"></div>
+<div class="summary-grid">
+<div class="summary-card"><span>本日測定</span><strong id="sumTotal">0</strong></div>
+<div class="summary-card green"><span>緑</span><strong id="sumGreen">0</strong></div>
+<div class="summary-card yellow"><span>黄</span><strong id="sumYellow">0</strong></div>
+<div class="summary-card orange"><span>橙</span><strong id="sumOrange">0</strong></div>
+<div class="summary-card red"><span>赤</span><strong id="sumRed">0</strong></div>
+</div>
 
 <div class="v10-panel">
-      <div class="v10-head">
-        <div>
-          <h3>Ver.10 危険度ダッシュボード</h3>
-          <p>保存済みの測定結果、WBGT、作業内容、本人申告から試験的な危険度スコアを算出します。</p>
-        </div>
-        <button id="openMonitorMode" type="button">大型モニター表示</button>
-      </div>
-
-      <div class="v10-summary-grid">
-        <div><span>現場平均スコア</span><strong id="siteAverageRisk">--</strong></div>
-        <div><span>最高スコア</span><strong id="siteMaxRisk">--</strong></div>
-        <div><span>悪化傾向者</span><strong id="worseningCount">0</strong></div>
-        <div><span>測定率</span><strong id="v10MeasureRate">--</strong></div>
-      </div>
-
-      <div class="v10-grid">
-        <section class="v10-card">
-          <h4>危険度ランキング</h4>
-          <div id="riskRanking" class="risk-ranking">測定データがありません。</div>
-        </section>
-        <section class="v10-card">
-          <h4>悪化傾向・次回確認目安</h4>
-          <div id="forecastList" class="forecast-list">測定履歴が不足しています。</div>
-        </section>
-      </div>
-
-      <section class="v10-card">
-        <h4>現場大型モニター</h4>
-        <div id="monitorBoard" class="monitor-board">
-          <div><span>現在の対象現場</span><strong id="monitorSite">全現場</strong></div>
-          <div><span>測定人数</span><strong id="monitorWorkers">0人</strong></div>
-          <div><span>要注意</span><strong id="monitorCaution">0人</strong></div>
-          <div><span>高リスク</span><strong id="monitorDanger">0人</strong></div>
-          <div><span>平均WBGT</span><strong id="monitorWbgt">--</strong></div>
-          <div><span>測定率</span><strong id="monitorRate">--</strong></div>
-        </div>
-      </section>
-
-      <div class="v10-note">
+<div class="v10-head">
+<div>
+<h3>Ver.10 危険度ダッシュボード</h3>
+<p>保存済みの測定結果、WBGT、作業内容、本人申告から試験的な危険度スコアを算出します。</p>
+</div>
+<button id="openMonitorMode" type="button">大型モニター表示</button>
+</div>
+<div class="v10-summary-grid">
+<div><span>現場平均スコア</span><strong id="siteAverageRisk">--</strong></div>
+<div><span>最高スコア</span><strong id="siteMaxRisk">--</strong></div>
+<div><span>悪化傾向者</span><strong id="worseningCount">0</strong></div>
+<div><span>測定率</span><strong id="v10MeasureRate">--</strong></div>
+</div>
+<div class="v10-grid">
+<section class="v10-card">
+<h4>危険度ランキング</h4>
+<div class="risk-ranking" id="riskRanking">測定データがありません。</div>
+</section>
+<section class="v10-card">
+<h4>悪化傾向・次回確認目安</h4>
+<div class="forecast-list" id="forecastList">測定履歴が不足しています。</div>
+</section>
+</div>
+<section class="v10-card">
+<h4>現場大型モニター</h4>
+<div class="monitor-board" id="monitorBoard">
+<div><span>現在の対象現場</span><strong id="monitorSite">全現場</strong></div>
+<div><span>測定人数</span><strong id="monitorWorkers">0人</strong></div>
+<div><span>要注意</span><strong id="monitorCaution">0人</strong></div>
+<div><span>高リスク</span><strong id="monitorDanger">0人</strong></div>
+<div><span>平均WBGT</span><strong id="monitorWbgt">--</strong></div>
+<div><span>測定率</span><strong id="monitorRate">--</strong></div>
+</div>
+</section>
+<div class="v10-note">
         危険度スコアと悪化傾向は、医療診断や発症予測ではありません。本人申告、対面確認、WBGT、作業状況を優先してください。
       </div>
-    </div>
-
+</div>
 <div class="analysis-panel">
-      <div class="analysis-head">
-        <div>
-          <h3>傾向分析・管理者コメント</h3>
-          <p>保存済みデータから個人・現場全体の変化を整理し、管理者確認用コメントを作成します。</p>
-        </div>
-        <div class="analysis-actions">
-          <button id="copyDailyReport" type="button">日報コメントをコピー</button>
-          <button id="copyMonthlyReport" type="button">月報コメントをコピー</button>
-        </div>
-      </div>
-
-      <div class="analysis-grid">
-        <section class="analysis-card">
-          <h4>現場全体の本日傾向</h4>
-          <div id="siteTrendSummary" class="analysis-text">保存済みデータを分析します。</div>
-        </section>
-
-        <section class="analysis-card">
-          <h4>管理者向け総合コメント</h4>
-          <div id="managerSummary" class="analysis-text">対象日・現場の条件に合わせて表示します。</div>
-        </section>
-
-        <section class="analysis-card">
-          <h4>推奨対応</h4>
-          <div id="recommendedActions" class="recommendation-list">現在、特別な推奨対応はありません。</div>
-        </section>
-
-        <section class="analysis-card">
-          <h4>直近30日の傾向</h4>
-          <div id="monthlyTrendSummary" class="analysis-text">30日分の保存データを集計します。</div>
-        </section>
-      </div>
-
-      <div class="report-preview-grid">
-        <section>
-          <h4>日報用コメント</h4>
-          <textarea id="dailyReportText" rows="8" readonly></textarea>
-        </section>
-        <section>
-          <h4>月報用コメント</h4>
-          <textarea id="monthlyReportText" rows="8" readonly></textarea>
-        </section>
-      </div>
-    </div>
-
-    <div class="validation-panel">
-      <div class="validation-head">
-        <div>
-          <h3>実証評価記録</h3>
-          <p>アプリ判定と管理者の実際の確認結果を記録し、今後の判定基準調整に使用します。</p>
-        </div>
-      </div>
-
-      <div class="validation-entry">
-        <label>対象作業員
+<div class="analysis-head">
+<div>
+<h3>傾向分析・管理者コメント</h3>
+<p>保存済みデータから個人・現場全体の変化を整理し、管理者確認用コメントを作成します。</p>
+</div>
+<div class="analysis-actions">
+<button id="copyDailyReport" type="button">日報コメントをコピー</button>
+<button id="copyMonthlyReport" type="button">月報コメントをコピー</button>
+</div>
+</div>
+<div class="analysis-grid">
+<section class="analysis-card">
+<h4>現場全体の本日傾向</h4>
+<div class="analysis-text" id="siteTrendSummary">保存済みデータを分析します。</div>
+</section>
+<section class="analysis-card">
+<h4>管理者向け総合コメント</h4>
+<div class="analysis-text" id="managerSummary">対象日・現場の条件に合わせて表示します。</div>
+</section>
+<section class="analysis-card">
+<h4>推奨対応</h4>
+<div class="recommendation-list" id="recommendedActions">現在、特別な推奨対応はありません。</div>
+</section>
+<section class="analysis-card">
+<h4>直近30日の傾向</h4>
+<div class="analysis-text" id="monthlyTrendSummary">30日分の保存データを集計します。</div>
+</section>
+</div>
+<div class="report-preview-grid">
+<section>
+<h4>日報用コメント</h4>
+<textarea id="dailyReportText" readonly="" rows="8"></textarea>
+</section>
+<section>
+<h4>月報用コメント</h4>
+<textarea id="monthlyReportText" readonly="" rows="8"></textarea>
+</section>
+</div>
+</div>
+<div class="validation-panel">
+<div class="validation-head">
+<div>
+<h3>実証評価記録</h3>
+<p>アプリ判定と管理者の実際の確認結果を記録し、今後の判定基準調整に使用します。</p>
+</div>
+</div>
+<div class="validation-entry">
+<label>対象作業員
           <select id="validationWorker">
-            <option value="">作業員を選択</option>
-          </select>
-        </label>
-        <label>対象日時
+<option value="">作業員を選択</option>
+</select>
+</label>
+<label>対象日時
           <select id="validationRecord">
-            <option value="">測定記録を選択</option>
-          </select>
-        </label>
-        <label>管理者確認
+<option value="">測定記録を選択</option>
+</select>
+</label>
+<label>管理者確認
           <select id="validationResult">
-            <option value="">選択</option>
-            <option value="問題なし">問題なし</option>
-            <option value="休憩実施">休憩実施</option>
-            <option value="水分補給実施">水分補給実施</option>
-            <option value="作業中止">作業中止</option>
-            <option value="医療確認">医療確認</option>
-            <option value="判定不一致">判定不一致</option>
-          </select>
-        </label>
-        <label>管理者メモ
-          <input id="validationMemo" placeholder="本人の状態、対応内容など">
-        </label>
-        <button id="saveValidation" type="button">評価を保存</button>
-      </div>
-
-      <div class="validation-summary-grid">
-        <div><span>評価件数</span><strong id="validationCount">0</strong></div>
-        <div><span>判定一致率</span><strong id="validationMatchRate">--</strong></div>
-        <div><span>対応実施率</span><strong id="validationActionRate">--</strong></div>
-        <div><span>判定不一致</span><strong id="validationMismatch">0</strong></div>
-      </div>
-
-      <div id="validationList" class="validation-list">評価記録はありません。</div>
-    </div>
-
+<option value="">選択</option>
+<option value="問題なし">問題なし</option>
+<option value="休憩実施">休憩実施</option>
+<option value="水分補給実施">水分補給実施</option>
+<option value="作業中止">作業中止</option>
+<option value="医療確認">医療確認</option>
+<option value="判定不一致">判定不一致</option>
+</select>
+</label>
+<label>管理者メモ
+          <input id="validationMemo" placeholder="本人の状態、対応内容など"/>
+</label>
+<button id="saveValidation" type="button">評価を保存</button>
+</div>
+<div class="validation-summary-grid">
+<div><span>評価件数</span><strong id="validationCount">0</strong></div>
+<div><span>判定一致率</span><strong id="validationMatchRate">--</strong></div>
+<div><span>対応実施率</span><strong id="validationActionRate">--</strong></div>
+<div><span>判定不一致</span><strong id="validationMismatch">0</strong></div>
+</div>
+<div class="validation-list" id="validationList">評価記録はありません。</div>
+</div>
 <div class="master-panel">
-      <div class="toolbar master-toolbar">
-        <div>
-          <h3>現場運用マスタ</h3>
-          <p>現場・作業班・作業員を登録すると、測定入力と測定漏れ確認へ自動反映します。</p>
-        </div>
-        <div class="master-actions">
-          <button id="exportMasterJson" type="button">設定を書き出す</button>
-          <label class="file-button">設定を読み込む
-            <input id="importMasterJson" type="file" accept=".json,application/json">
-          </label>
-        </div>
-      </div>
-
-      <div class="master-grid">
-        <section class="master-section">
-          <h4>現場マスタ</h4>
-          <div class="inline-entry">
-            <input id="masterSiteName" placeholder="現場名">
-            <button id="addSiteMaster" type="button">追加</button>
-          </div>
-          <div id="siteMasterList" class="master-list"></div>
-        </section>
-
-        <section class="master-section">
-          <h4>作業班マスタ</h4>
-          <div class="inline-entry">
-            <input id="masterTeamName" placeholder="作業班名">
-            <button id="addTeamMaster" type="button">追加</button>
-          </div>
-          <div id="teamMasterList" class="master-list"></div>
-        </section>
-
-        <section class="master-section worker-master-section">
-          <h4>作業員マスタ</h4>
-          <div class="worker-master-entry">
-            <input id="masterWorkerId" placeholder="作業員ID">
-            <input id="masterWorkerName" placeholder="氏名">
-            <select id="masterWorkerSite"><option value="">所属現場</option></select>
-            <select id="masterWorkerTeam"><option value="">作業班</option></select>
-            <button id="addWorkerMaster" type="button">登録</button>
-          </div>
-          <div id="workerMasterList" class="master-list worker-master-list"></div>
-        </section>
-      </div>
-
-      <div class="sync-card">
-        <div>
-          <strong>データ同期準備</strong>
-          <span>現在は端末内保存です。JSON書出し・読込みで別端末へ移行できます。</span>
-        </div>
-        <button id="exportAllData" type="button">全データバックアップ</button>
-        <label class="file-button">全データ復元
-          <input id="importAllData" type="file" accept=".json,application/json">
-        </label>
-      </div>
-    </div>
-
-    <div class="notification-panel">
-      <div class="notification-head">
-        <div>
-          <h3>管理者通知センター</h3>
-          <p>橙・赤、または黄判定が連続した作業員を自動抽出します。</p>
-        </div>
-        <button id="clearNotifications" type="button">確認済みにする</button>
-      </div>
-      <div id="notificationList" class="notification-list">通知はありません。</div>
-    </div>
-
+<div class="toolbar master-toolbar">
+<div>
+<h3>現場運用マスタ</h3>
+<p>現場・作業班・作業員を登録すると、測定入力と測定漏れ確認へ自動反映します。</p>
+</div>
+<div class="master-actions">
+<button id="exportMasterJson" type="button">設定を書き出す</button>
+<label class="file-button">設定を読み込む
+            <input accept=".json,application/json" id="importMasterJson" type="file"/>
+</label>
+</div>
+</div>
+<div class="master-grid">
+<section class="master-section">
+<h4>現場マスタ</h4>
+<div class="inline-entry">
+<input id="masterSiteName" placeholder="現場名"/>
+<button id="addSiteMaster" type="button">追加</button>
+</div>
+<div class="master-list" id="siteMasterList"></div>
+</section>
+<section class="master-section">
+<h4>作業班マスタ</h4>
+<div class="inline-entry">
+<input id="masterTeamName" placeholder="作業班名"/>
+<button id="addTeamMaster" type="button">追加</button>
+</div>
+<div class="master-list" id="teamMasterList"></div>
+</section>
+<section class="master-section worker-master-section">
+<h4>作業員マスタ</h4>
+<div class="worker-master-entry">
+<input id="masterWorkerId" placeholder="作業員ID"/>
+<input id="masterWorkerName" placeholder="氏名"/>
+<select id="masterWorkerSite"><option value="">所属現場</option></select>
+<select id="masterWorkerTeam"><option value="">作業班</option></select>
+<button id="addWorkerMaster" type="button">登録</button>
+</div>
+<div class="master-list worker-master-list" id="workerMasterList"></div>
+</section>
+</div>
+<div class="sync-card">
+<div>
+<strong>データ同期準備</strong>
+<span>現在は端末内保存です。JSON書出し・読込みで別端末へ移行できます。</span>
+</div>
+<button id="exportAllData" type="button">全データバックアップ</button>
+<label class="file-button">全データ復元
+          <input accept=".json,application/json" id="importAllData" type="file"/>
+</label>
+</div>
+</div>
+<div class="notification-panel">
+<div class="notification-head">
+<div>
+<h3>管理者通知センター</h3>
+<p>橙・赤、または黄判定が連続した作業員を自動抽出します。</p>
+</div>
+<button id="clearNotifications" type="button">確認済みにする</button>
+</div>
+<div class="notification-list" id="notificationList">通知はありません。</div>
+</div>
 <div class="admin-panel">
-      <div class="toolbar admin-toolbar">
-        <div>
-          <h3>管理者ダッシュボード</h3>
-          <p>現場・日付・判定で絞り込み、要対応者と測定漏れを確認します。</p>
-        </div>
-        <div class="admin-filters">
-          <label>対象日
-            <input id="adminDate" type="date">
-          </label>
-          <label>現場
+<div class="toolbar admin-toolbar">
+<div>
+<h3>管理者ダッシュボード</h3>
+<p>現場・日付・判定で絞り込み、要対応者と測定漏れを確認します。</p>
+</div>
+<div class="admin-filters">
+<label>対象日
+            <input id="adminDate" type="date"/>
+</label>
+<label>現場
             <select id="adminSite">
-              <option value="">すべての現場</option>
-            </select>
-          </label>
-          <label>作業班
+<option value="">すべての現場</option>
+</select>
+</label>
+<label>作業班
             <select id="adminTeam">
-              <option value="">すべての班</option>
-            </select>
-          </label>
-          <label>判定
+<option value="">すべての班</option>
+</select>
+</label>
+<label>判定
             <select id="adminLevel">
-              <option value="">すべて</option>
-              <option value="green">緑</option>
-              <option value="yellow">黄</option>
-              <option value="orange">橙</option>
-              <option value="red">赤</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div class="admin-action-grid">
-        <div class="admin-box">
-          <h4>要対応者</h4>
-          <div id="attentionList" class="attention-list">該当者なし</div>
-        </div>
-        <div class="admin-box">
-          <h4>測定漏れ確認</h4>
-          <div class="missing-controls">
-            <textarea id="expectedWorkers" rows="5" placeholder="対象作業員IDを1行ずつ入力&#10;例：&#10;A001&#10;A002&#10;A003"></textarea>
-            <button id="checkMissing" type="button">測定漏れを確認</button>
-          </div>
-          <div id="missingList" class="missing-list">対象者を入力してください。</div>
-        </div>
-      </div>
-
-      <div class="daily-summary-card">
-        <div class="daily-summary-head">
-          <h4>日別集計</h4>
-          <button id="exportDailyCsv" type="button">日報用CSV出力</button>
-        </div>
-        <div id="dailySummary" class="daily-summary">保存済みデータを集計します。</div>
-      </div>
-    </div>
-
+<option value="">すべて</option>
+<option value="green">緑</option>
+<option value="yellow">黄</option>
+<option value="orange">橙</option>
+<option value="red">赤</option>
+</select>
+</label>
+</div>
+</div>
+<div class="admin-action-grid">
+<div class="admin-box">
+<h4>要対応者</h4>
+<div class="attention-list" id="attentionList">該当者なし</div>
+</div>
+<div class="admin-box">
+<h4>測定漏れ確認</h4>
+<div class="missing-controls">
+<textarea id="expectedWorkers" placeholder="対象作業員IDを1行ずつ入力
+例：
+A001
+A002
+A003" rows="5"></textarea>
+<button id="checkMissing" type="button">測定漏れを確認</button>
+</div>
+<div class="missing-list" id="missingList">対象者を入力してください。</div>
+</div>
+</div>
+<div class="daily-summary-card">
+<div class="daily-summary-head">
+<h4>日別集計</h4>
+<button id="exportDailyCsv" type="button">日報用CSV出力</button>
+</div>
+<div class="daily-summary" id="dailySummary">保存済みデータを集計します。</div>
+</div>
+</div>
 <div class="worker-record-card">
-      <div class="toolbar worker-toolbar">
-        <div>
-          <h3>作業員別カルテ</h3>
-          <p>保存済みデータから、前回との差と時間帯別の変化を表示します。</p>
-        </div>
-        <label>作業員
+<div class="toolbar worker-toolbar">
+<div>
+<h3>作業員別カルテ</h3>
+<p>保存済みデータから、前回との差と時間帯別の変化を表示します。</p>
+</div>
+<label>作業員
           <select id="workerSelect">
-            <option value="">作業員を選択</option>
-          </select>
-        </label>
-      </div>
-
-      <div id="workerAlert" class="worker-alert neutral">作業員を選択してください。</div>
-
-      <div class="worker-stat-grid">
-        <div><span>直近判定</span><strong id="cardLatest">--</strong></div>
-        <div><span>前回との差</span><strong id="cardDifference">--</strong></div>
-        <div><span>本日測定</span><strong id="cardTodayCount">0回</strong></div>
-        <div><span>連続注意判定</span><strong id="cardConsecutive">0回</strong></div>
-      </div>
-
-      <div class="chart-card">
-        <div class="chart-head">
-          <strong>顔状態・環境の履歴</strong>
-          <span>直近12件</span>
-        </div>
-        <canvas id="workerTrendChart" width="900" height="280"></canvas>
-        <div class="chart-legend">
-          <span>顔色変化</span><span>顔の動き</span><span>WBGT</span>
-        </div>
-      </div>
-
-      <div class="time-band-grid">
-        <div><span>朝</span><strong id="bandMorning">--</strong></div>
-        <div><span>昼</span><strong id="bandNoon">--</strong></div>
-        <div><span>午後</span><strong id="bandAfternoon">--</strong></div>
-      </div>
-
-      <div id="workerComment" class="instruction">
+<option value="">作業員を選択</option>
+</select>
+</label>
+</div>
+<div class="worker-alert neutral" id="workerAlert">作業員を選択してください。</div>
+<div class="worker-stat-grid">
+<div><span>直近判定</span><strong id="cardLatest">--</strong></div>
+<div><span>前回との差</span><strong id="cardDifference">--</strong></div>
+<div><span>本日測定</span><strong id="cardTodayCount">0回</strong></div>
+<div><span>連続注意判定</span><strong id="cardConsecutive">0回</strong></div>
+</div>
+<div class="chart-card">
+<div class="chart-head">
+<strong>顔状態・環境の履歴</strong>
+<span>直近12件</span>
+</div>
+<canvas height="280" id="workerTrendChart" width="900"></canvas>
+<div class="chart-legend">
+<span>顔色変化</span><span>顔の動き</span><span>WBGT</span>
+</div>
+</div>
+<div class="time-band-grid">
+<div><span>朝</span><strong id="bandMorning">--</strong></div>
+<div><span>昼</span><strong id="bandNoon">--</strong></div>
+<div><span>午後</span><strong id="bandAfternoon">--</strong></div>
+</div>
+<div class="instruction" id="workerComment">
         保存済みデータが3件以上になると、傾向コメントの精度が上がります。
       </div>
-    </div>
-
+</div>
 <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>日時</th><th>現場</th><th>作業員</th><th>区分</th>
-            <th>判定</th><th>顔色変化</th><th>品質</th><th>指示</th>
-          </tr>
-        </thead>
-        <tbody id="recordsBody"></tbody>
-      </table>
-    </div>
-  </div>
+<table>
+<thead>
+<tr>
+<th>日時</th><th>現場</th><th>作業員</th><th>区分</th>
+<th>判定</th><th>顔色変化</th><th>品質</th><th>指示</th>
+</tr>
+</thead>
+<tbody id="recordsBody"></tbody>
+</table>
+</div>
+</div>
 </section>
-
-<section id="settings" class="view">
-  <div class="card">
-    <h2>設定</h2>
-    <div class="form-grid">
-      <label>準備時間（秒）
-        <input id="warmupSec" type="number" min="3" max="10" value="5">
-      </label>
-      <label>本測定時間（秒）
-        <input id="durationSec" type="number" min="20" max="40" value="25">
-      </label>
-      <label>黄判定 脈拍差（bpm）
-        <input id="yellowDelta" type="number" min="10" max="50" value="20">
-      </label>
-      <label>橙判定 脈拍差（bpm）
-        <input id="orangeDelta" type="number" min="20" max="70" value="35">
-      </label>
-      <label>黄判定 顔色変化（bpm）
-        <input id="yellowBpm" type="number" min="80" max="140" value="100">
-      </label>
-      <label>橙判定 顔色変化（bpm）
-        <input id="orangeBpm" type="number" min="90" max="180" value="120">
-      </label>
-      <label>再測定間隔（分）
-        <input id="retryMin" type="number" min="5" max="60" value="10">
-      </label>
-    </div>
-    <button id="saveSettings" class="primary">設定を保存</button>
-    <hr>
-    <h3>判定上の注意</h3>
-    <ul>
-      <li>本アプリは熱中症・脱水・疾病を診断しません。</li>
-      <li>「緑」は安全や就業可能を保証しません。</li>
-      <li>本人に異常がある場合、アプリ結果に関係なく作業を中止し、管理者が確認してください。</li>
-      <li>顔画像・動画は保存しません。数値化した結果のみ端末内に保存します。</li>
-      <li>通常カメラから皮膚温・発汗量を直接測定することはできません。本版では推定表示しません。</li>
-    </ul>
-  </div>
+<section class="view" id="settings">
+<div class="card">
+<h2>設定</h2>
+<div class="form-grid">
+<label>準備時間（秒）
+        <input id="warmupSec" max="10" min="3" type="number" value="5"/>
+</label>
+<label>本測定時間（秒）
+        <input id="durationSec" max="40" min="20" type="number" value="25"/>
+</label>
+<label>黄判定 脈拍差（bpm）
+        <input id="yellowDelta" max="50" min="10" type="number" value="20"/>
+</label>
+<label>橙判定 脈拍差（bpm）
+        <input id="orangeDelta" max="70" min="20" type="number" value="35"/>
+</label>
+<label>黄判定 顔色変化（bpm）
+        <input id="yellowBpm" max="140" min="80" type="number" value="100"/>
+</label>
+<label>橙判定 顔色変化（bpm）
+        <input id="orangeBpm" max="180" min="90" type="number" value="120"/>
+</label>
+<label>再測定間隔（分）
+        <input id="retryMin" max="60" min="5" type="number" value="10"/>
+</label>
+</div>
+<button class="primary" id="saveSettings">設定を保存</button>
+<hr/>
+<h3>判定上の注意</h3>
+<ul>
+<li>本アプリは熱中症・脱水・疾病を診断しません。</li>
+<li>「緑」は安全や就業可能を保証しません。</li>
+<li>本人に異常がある場合、アプリ結果に関係なく作業を中止し、管理者が確認してください。</li>
+<li>顔画像・動画は保存しません。数値化した結果のみ端末内に保存します。</li>
+<li>通常カメラから皮膚温・発汗量を直接測定することはできません。本版では推定表示しません。</li>
+</ul>
+</div>
 </section>
 </main>
-
-<footer>Prototype v10.3（大型カメラ・判定結果ダッシュボード版）</footer>
-<script type="module" src="face-landmarker.js?v=103"></script>
-<script src="app.js?v=103"></script>
+<footer>Prototype v10.3.1（表示不具合修正版）</footer>
+<script src="face-landmarker.js?v=1031" type="module"></script>
+<script src="app.js?v=1031"></script>
 </body>
 </html>

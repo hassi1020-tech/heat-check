@@ -594,3 +594,54 @@ body.monitor-mode .monitor-board strong{font-size:2.5rem}
 @media(max-width:1000px){.result-v103-hero,.result-v103-details{grid-template-columns:1fr}.camera-wrap{max-width:100%}}
 @media(max-width:700px){.camera-wrap{aspect-ratio:4/3}.measure-status-grid{grid-template-columns:repeat(2,1fr)}.result-condition-card,.result-score-card{grid-template-columns:1fr}.result-status-area,.score-main{border-right:0;border-bottom:1px solid #e2e8f0}.result-status-area h3{font-size:2.1rem}.result-metric-grid{grid-template-columns:1fr 1fr}.metric-context{grid-column:span 2}.result-ai-word{grid-template-columns:1fr}.result-followup{grid-template-columns:1fr}}
 @media(max-width:480px){.result-metric-grid{grid-template-columns:1fr}.metric-context{grid-column:span 1}.result-status-area{align-items:flex-start}.result-face-icon{font-size:3rem}}
+
+
+/* Ver.10.3.1 display fixes */
+#dashboard{
+  overflow:visible;
+}
+
+#dashboard > .card{
+  margin-top:0;
+}
+
+#dashboard .summary{
+  min-height:0;
+  margin:0;
+}
+
+#dashboard .summary:empty{
+  display:none;
+}
+
+#dashboard .summary-grid{
+  margin-top:16px;
+}
+
+#dashboard .decision-panel,
+#dashboard #aiResultPanel{
+  display:none!important;
+}
+
+.result-card-v103:not(.hidden){
+  display:block!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+
+.result-v103-hero,
+.result-v103-details{
+  align-items:stretch;
+}
+
+.result-ai-comment,
+.result-action-list,
+.result-factor-summary{
+  min-height:40px;
+}
+
+@media(max-width:800px){
+  #dashboard > .card{
+    padding-top:14px;
+  }
+}
