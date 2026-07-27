@@ -503,3 +503,34 @@
     grid-template-columns:1fr;
   }
 }
+
+
+/* =========================================================
+   Ver.11.3 クラウド第1段階
+   ========================================================= */
+.header-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.cloud-auth{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.cloud-status{display:inline-flex;align-items:center;border-radius:999px;padding:5px 10px;font-size:.78rem;font-weight:800;background:#e5e7eb;color:#374151}
+.cloud-status.online{background:#dcfce7;color:#166534}
+.cloud-status.syncing{background:#dbeafe;color:#1d4ed8}
+.cloud-status.offline{background:#fef3c7;color:#92400e}
+.cloud-status.waiting{background:#e5e7eb;color:#374151}
+.cloud-user{font-size:.78rem;color:#e7fffb;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cloud-login-button,.cloud-logout-button{border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.14);color:#fff;padding:6px 10px;border-radius:8px;font-weight:700}
+.cloud-login-button:hover,.cloud-logout-button:hover{background:rgba(255,255,255,.24)}
+.cloud-control-card{margin-bottom:16px}
+.cloud-control-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.cloud-info-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}
+.cloud-info-grid>div{background:#f4f8f8;border:1px solid #d9e5e5;border-radius:10px;padding:12px}
+.cloud-info-grid span{display:block;color:#60777b;font-size:.78rem;margin-bottom:5px}
+.cloud-info-grid strong{display:block;color:#17343a;font-size:.95rem;overflow-wrap:anywhere}
+@media(max-width:850px){
+  .app-header{align-items:flex-start}
+  .header-right{align-items:flex-start;width:100%}
+  .cloud-auth{justify-content:flex-start}
+  .cloud-info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:520px){
+  .cloud-info-grid{grid-template-columns:1fr}
+  .cloud-user{max-width:160px}
+}

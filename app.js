@@ -19,7 +19,14 @@ function loadDB(){
     return db;
   }catch(e){console.error(e);return defaultDB();}
 }
-function saveDB(db){db.updatedAt=new Date().toISOString();localStorage.setItem(DB_KEY,JSON.stringify(db));}
+function saveDB(db,options={}){
+  db.updatedAt=new Date().toISOString();
+  localStorage.setItem(DB_KEY,JSON.stringify(db));
+  if(!options.fromCloud && window.CloudBridge?.isReady?.()){
+    window.CloudBridge.queueSave(db);
+  }
+  window.dispatchEvent(new CustomEvent("heatcheck:localdbchanged",{detail:{fromCloud:!!options.fromCloud}}));
+}
 function uid(){return (crypto.randomUUID?.()||Date.now()+"-"+Math.random().toString(16).slice(2));}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function normalizeId(v){return String(v||"").trim().replace(/\u3000/g,"").replace(/\s+/g,"").toUpperCase();}
@@ -308,8 +315,18 @@ function init(){
   renderAllSelectors();renderMaster();renderValidation();renderDashboard();renderWorkerCard();
 }
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
+window.HeatCheckApp={
+  loadDB,
+  saveDB,
+  defaultDB,
+  refresh(){
+    init();
+    renderAdminDashboard?.();
+    renderMasterTransferStatus?.();
+  }
+};
 init();
-console.info("現場 AIコンディションチェック Ver.11.2 第4.1 完全修正版 読込完了");
+console.info("現場 AIコンディションチェック Ver.11.3 クラウド第1段階 読込完了");
 
 
 /* =========================================================

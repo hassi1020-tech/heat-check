@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
-  <title>現場 AIコンディションチェック Ver.11.2</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1102s41">
-  <link rel="stylesheet" href="styles.css?v=1102s41">
+  <title>現場 AIコンディションチェック Ver.11.3</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1103c1">
+  <link rel="stylesheet" href="styles.css?v=1103c1">
 </head>
 <body>
 <header class="app-header">
@@ -14,7 +14,15 @@
     <h1>現場 AIコンディションチェック</h1>
     <p>非接触スクリーニング／顔状態チェック</p>
   </div>
-  <span class="version">Ver.11.2 第4.1</span>
+  <div class="header-right">
+      <span class="version">Ver.11.3 クラウド第1段階</span>
+      <div class="cloud-auth">
+        <span id="cloudStatus" class="cloud-status offline">未接続</span>
+        <span id="cloudUser" class="cloud-user">未ログイン</span>
+        <button id="cloudLogin" type="button" class="cloud-login-button">Googleログイン</button>
+        <button id="cloudLogout" type="button" class="cloud-logout-button hidden">ログアウト</button>
+      </div>
+    </div>
 </header>
 
 <nav class="tabs" aria-label="画面切替">
@@ -344,6 +352,27 @@
 </section>
 
 <section id="view-settings" class="view">
+  <article class="card cloud-control-card">
+    <div class="cloud-control-head">
+      <div>
+        <h2>クラウド同期</h2>
+        <p class="note">Firestoreを正式な保存先として、PC・スマホ間でマスタ・設定・測定結果を同期します。</p>
+      </div>
+      <span id="cloudModeBadge" class="master-status-badge">未接続</span>
+    </div>
+    <div class="cloud-info-grid">
+      <div><span>ログイン</span><strong id="cloudLoginState">未ログイン</strong></div>
+      <div><span>同期状態</span><strong id="cloudSyncState">待機中</strong></div>
+      <div><span>最終同期</span><strong id="cloudLastSync">—</strong></div>
+      <div><span>保存先</span><strong>Cloud Firestore</strong></div>
+    </div>
+    <div class="button-row">
+      <button id="cloudManualSync" type="button" class="primary">今すぐ同期</button>
+      <button id="cloudUploadLocal" type="button">端末データをクラウドへ反映</button>
+    </div>
+    <div id="cloudMessage" class="status"></div>
+    <p class="note">未ログイン時は端末内へ保存します。ログイン後はFirestoreが正式データとなり、通信復旧時に自動同期します。</p>
+  </article>
   <div class="grid two">
     <article class="card">
       <h2>測定設定</h2>
@@ -368,8 +397,9 @@
 </main>
 
 <footer>
-  Prototype Ver.11.2 第4.1／非接触スクリーニング。医療診断には使用できません。
+  Prototype Ver.11.3 クラウド第1段階／非接触スクリーニング。医療診断には使用できません。
 </footer>
-<script src="app.js?v=1102s41"></script>
+<script src="app.js?v=1103c1"></script>
+<script type="module" src="firebase-cloud.js?v=1103c1"></script>
 </body>
 </html>
