@@ -601,6 +601,18 @@ function judge(face,context,baseline){
     instruction:"顔動画・現場条件・本人申告の範囲では、明らかな変化は検出されませんでした。熱中症でないことや就業可能を保証するものではありません。"};
 }
 
+
+function resultLevelIndex(r,score){if(score>=80||r.level==="red")return 4;if(score>=60||r.level==="orange")return 3;if(score>=35||r.level==="yellow")return 2;return 1;}
+function resultLevelName(i){return ["","レベル1（良好）","レベル2（注意）","レベル3（要休憩）","レベル4（危険）"][i];}
+function resultSignal(i){return ["","🟢","🟡","🟠","🔴"][i];}
+function resultTitle(i){return ["","コンディション良好","注意","要休憩","危険"][i];}
+function resultMainAction(i){return ["","通常監視を継続してください","水分補給して早めに再確認してください","涼しい場所で休憩してください","作業を中止してください"][i];}
+function resultBadge(i){return ["","✅ 通常監視を継続","💧 推奨：水分補給・再測定","🧊 推奨：休憩・補給・確認","🚨 作業中止・管理者確認"][i];}
+function resultAiComment(r,i){const n=r.workerName||r.workerId||"対象者";if(i===4)return `${n}さんは、本人申告または測定条件から非常に高い注意状態です。再測定より先に作業中止と管理者の対面確認を優先してください。`;if(i===3)return `${n}さんは、顔状態または暑熱条件に複数の注意要因があります。作業から離れ、休憩・水分塩分補給・対面確認を行ってください。`;if(i===2)return `${n}さんは、通常時と比べて注意が必要な変化があります。水分・塩分を補給し、作業負荷を調整して再確認してください。`;return `${n}さんは、今回の測定では大きな注意変化は確認されていません。本人の申告を優先しながら通常監視を続けてください。`;}
+function resultActions(i){if(i===4)return [["🚨","作業を中止","涼しい場所へ移動し、本人を一人にしないでください。"],["👷","管理者が直ちに確認","意識・会話・歩行状態を対面確認してください。"],["📞","必要時は緊急対応","重い症状がある場合は現場の緊急手順に従ってください。"]];if(i===3)return [["🧊","涼しい場所で休憩","作業から離れて体温上昇を抑えてください。"],["💧","水分・塩分を補給","少量ずつ確実に補給してください。"],["👷","管理者が本人を確認","改善しない場合は作業へ戻さないでください。"]];if(i===2)return [["💧","水分・塩分を補給","のどが渇く前にこまめに摂取してください。"],["🌤","日陰・涼しい場所で休憩","可能な範囲で作業負荷を下げてください。"],["👷","体調変化を管理者へ報告","めまい・頭痛・吐き気は早めに相談してください。"]];return [["✅","通常監視を継続","今回の測定では大きな注意変化はありません。"],["💧","定期的に水分・塩分補給","本人が異常を感じる前から補給してください。"],["🕒","予定どおり休憩・再測定","現場の測定ルールに従ってください。"]];}
+function setMetricTag(id,text,state){const e=$(id);if(!e)return;e.textContent=text;const card=e.closest('.result-metric');card.classList.remove('good','caution','danger');if(state)card.classList.add(state);}
+function renderResultDashboard(r,score){const i=resultLevelIndex(r,score);$("resultSignal").textContent=resultSignal(i);$("resultLevelText").textContent=resultLevelName(i);$("resultMainTitle").textContent=resultTitle(i);$("resultMainAction").textContent=resultMainAction(i);$("resultAiComment").textContent=resultAiComment(r,i);$("resultRiskScore").innerHTML=`${score}<small>/100</small>`;$("resultRiskLevel").textContent=resultLevelName(i);$("levelBadge").textContent=resultBadge(i);$("levelBadge").className=`result-top-badge ${r.level}`;for(let n=1;n<=4;n++)$("guideLevel"+n)?.classList.toggle('current',n===i);const factors=aiCommentFactors(r,score);$("resultFactorSummary").innerHTML=`<strong>AIが注目した要因：</strong> ${factors.map(esc).join('／')}`;$("resultActionList").innerHTML=resultActions(i).map(a=>`<div class="result-action-item"><span>${a[0]}</span><div><strong>${esc(a[1])}</strong><p>${esc(a[2])}</p></div></div>`).join('');$("resultRecheck").textContent=aiRecheckText(r,score);$("resultManager").textContent=aiManagerText(r,score);$("resultAiWord").textContent=resultAiComment(r,i);setMetricTag('tagColor',r.colorChange>=20?'変化大':r.colorChange>=10?'やや変化':'良好',r.colorChange>=20?'danger':r.colorChange>=10?'caution':'good');setMetricTag('tagQuality',r.quality<45?'注意':r.quality<70?'やや低下':'良好',r.quality<45?'danger':r.quality<70?'caution':'good');setMetricTag('tagAsym',r.asymmetry>=18?'差が大きい':r.asymmetry>=10?'やや差あり':'良好',r.asymmetry>=18?'danger':r.asymmetry>=10?'caution':'good');setMetricTag('tagMotion',r.avgMotion>=4?'動きあり':'良好',r.avgMotion>=4?'caution':'good');setMetricTag('tagFaceMotion',r.avgMotion>=4?'動きあり':'良好',r.avgMotion>=4?'caution':'good');setMetricTag('tagRed',Math.max(r.redScore||0,r.paleScore||0)>=6?'変化あり':'良好',Math.max(r.redScore||0,r.paleScore||0)>=6?'caution':'good');setMetricTag('tagZone',Math.abs(r.rednessChange||0)<3?'良好':'やや変化',Math.abs(r.rednessChange||0)<3?'good':'caution');const symptoms=r.context?.symptoms?Object.values(r.context.symptoms).filter(Boolean).length:0;setMetricTag('tagContext',symptoms?'症状申告あり':r.context?.wbgt!=null?'入力済み':'データなし',symptoms?'danger':r.context?.wbgt>=28?'caution':r.context?.wbgt!=null?'good':'');}
+
 function showResult(r){
   $("resultCard").classList.remove("hidden");
   $("resultTime").textContent=new Date(r.timestamp).toLocaleString("ja-JP");
@@ -623,6 +635,7 @@ function showResult(r){
   const history=records().filter(x=>x.workerId===r.workerId);
   const riskScore=numericRiskScore(r,history);
   r.riskScore=riskScore;
+  renderResultDashboard(r,riskScore);
   const forecast=workerRiskForecast(r.workerId,[...history,r]);
   if($("riskScoreStatus"))$("riskScoreStatus").textContent=`${riskScore}/100`;
   if($("forecastStatus"))$("forecastStatus").textContent=forecast.status;
@@ -654,8 +667,6 @@ $("remeasure").addEventListener("click",()=>{ $("resultCard").classList.add("hid
 $("startMeasure").onclick=function(e){
   e.preventDefault();
   startMeasure();
-
-  renderAiResultComment(r);
 };
 $("startCamera").addEventListener("click",startCamera);
 $("stopCamera").addEventListener("click",stopCamera);
@@ -1130,7 +1141,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.2プログラム読込済み。カメラを開始してください。";
+$("guide").textContent="v10.3プログラム読込済み。カメラを開始してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f172a">
   <title>現場 顔動画コンディションチェック</title>
-  <link rel="manifest" href="manifest.webmanifest?v=102">
-  <link rel="stylesheet" href="styles.css?v=102">
+  <link rel="manifest" href="manifest.webmanifest?v=103">
+  <link rel="stylesheet" href="styles.css?v=103">
 </head>
 <body>
 <header>
@@ -131,29 +131,70 @@
     <p class="note">通常カメラの映像から顔周辺の色変化・動き・明るさを解析します。照明、日焼け、汗、マスク、カメラ性能で結果が変わります。</p>
   </div>
 
-  <div id="resultCard" class="card hidden">
-    <div class="result-head">
-      <div>
-        <h2>判定結果</h2>
-        <p id="resultTime"></p>
-      </div>
-      <div id="levelBadge" class="badge">--</div>
+  <div id="resultCard" class="card result-card-v103 hidden">
+    <div class="result-v103-head">
+      <div><h2>判定結果</h2><p id="resultTime"></p></div>
+      <div id="levelBadge" class="result-top-badge">測定待ち</div>
     </div>
-    <div class="result-grid">
-      <div><span>顔色変化</span><strong id="resultBpm">--</strong></div>
-      <div><span>赤み傾向</span><strong id="resultDelta">--</strong></div>
-      <div><span>顔色変化</span><strong id="resultRedness">--</strong></div>
-      <div><span>動き</span><strong id="resultMotion">--</strong></div>
-      <div><span>映像品質</span><strong id="resultQuality">--</strong></div>
-      <div><span>左右差</span><strong id="resultBaseline">--</strong></div>
-      <div><span>顔の動き</span><strong id="resultStability">--</strong></div>
-      <div><span>WBGT・申告</span><strong id="resultContext">--</strong></div>
+
+    <div class="result-v103-hero">
+      <section class="result-condition-card">
+        <div class="result-status-area">
+          <div id="resultSignal" class="result-face-icon">⚪</div>
+          <div>
+            <span id="resultLevelText" class="result-level-pill">測定待ち</span>
+            <h3 id="resultMainTitle">測定結果を待っています</h3>
+            <strong id="resultMainAction" class="result-main-action">測定完了後に推奨対応を表示します</strong>
+          </div>
+        </div>
+        <div class="result-ai-comment">
+          <h3>AIコンディション評価</h3>
+          <p id="resultAiComment">顔状態、WBGT、本人申告などを組み合わせてコメントを表示します。</p>
+        </div>
+      </section>
+
+      <section class="result-score-card">
+        <div class="score-main"><span>危険度スコア</span><strong id="resultRiskScore">--<small>/100</small></strong><em id="resultRiskLevel">測定待ち</em></div>
+        <div class="score-guide">
+          <h3>判定レベルの目安</h3>
+          <div id="guideLevel1" class="guide-line guide1"><b>レベル1</b><span>良好</span><small>0～34</small></div>
+          <div id="guideLevel2" class="guide-line guide2"><b>レベル2</b><span>注意</span><small>35～59</small></div>
+          <div id="guideLevel3" class="guide-line guide3"><b>レベル3</b><span>要休憩</span><small>60～79</small></div>
+          <div id="guideLevel4" class="guide-line guide4"><b>レベル4</b><span>危険</span><small>80～100</small></div>
+        </div>
+      </section>
     </div>
-    <div id="instruction" class="instruction"></div>
-    <div class="actions">
-      <button id="saveResult" class="primary">結果を保存</button>
-      <button id="remeasure">再測定</button>
+
+    <div class="result-v103-details">
+      <section class="result-reason-card">
+        <h3>判定理由（AI分析のポイント）</h3>
+        <div class="result-metric-grid">
+          <div class="result-metric"><span>🙂</span><div><small>顔色変化</small><strong id="resultBpm">--</strong><em id="tagColor">未測定</em></div></div>
+          <div class="result-metric"><span>🩸</span><div><small>赤み傾向</small><strong id="resultDelta">--</strong><em id="tagRed">未測定</em></div></div>
+          <div class="result-metric"><span>◉</span><div><small>顔色の領域</small><strong id="resultRedness">--</strong><em id="tagZone">未測定</em></div></div>
+          <div class="result-metric"><span>🏃</span><div><small>動き</small><strong id="resultMotion">--</strong><em id="tagMotion">未測定</em></div></div>
+          <div class="result-metric"><span>📷</span><div><small>映像品質</small><strong id="resultQuality">--</strong><em id="tagQuality">未測定</em></div></div>
+          <div class="result-metric"><span>↔</span><div><small>左右差</small><strong id="resultBaseline">--</strong><em id="tagAsym">未測定</em></div></div>
+          <div class="result-metric"><span>〰</span><div><small>顔の動き</small><strong id="resultStability">--</strong><em id="tagFaceMotion">未測定</em></div></div>
+          <div class="result-metric metric-context"><span>🌡</span><div><small>WBGT・本人申告</small><strong id="resultContext">--</strong><em id="tagContext">未入力</em></div></div>
+        </div>
+        <div id="resultFactorSummary" class="result-factor-summary"></div>
+      </section>
+
+      <section class="result-action-card">
+        <h3>今やること（推奨アクション）</h3>
+        <div id="resultActionList" class="result-action-list"></div>
+        <div class="result-followup">
+          <div><span>再確認の目安</span><strong id="resultRecheck">--</strong></div>
+          <div><span>管理者への連絡</span><strong id="resultManager">--</strong></div>
+        </div>
+      </section>
     </div>
+
+    <div class="result-ai-word"><strong>🤖 AIからのひとこと</strong><span id="resultAiWord">測定後にコメントを表示します。</span><b id="resultSafetyWord">安全第一で作業してください</b></div>
+    <div id="instruction" class="result-caution-note"></div>
+    <p class="result-disclaimer">この結果はAIによるコンディション評価です。医療診断ではありません。本人の体調申告と管理者の判断を優先してください。</p>
+    <div class="actions result-buttons"><button id="saveResult" class="primary">結果を保存</button><button id="remeasure">再測定する</button></div>
   </div>
 </section>
 
@@ -593,8 +634,8 @@
 </section>
 </main>
 
-<footer>Prototype v10.2（判断結果シンプル表示版）</footer>
-<script type="module" src="face-landmarker.js?v=102"></script>
-<script src="app.js?v=102"></script>
+<footer>Prototype v10.3（大型カメラ・判定結果ダッシュボード版）</footer>
+<script type="module" src="face-landmarker.js?v=103"></script>
+<script src="app.js?v=103"></script>
 </body>
 </html>
