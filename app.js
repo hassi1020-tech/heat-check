@@ -31,7 +31,7 @@ $("saveWorker").onclick=()=>{
   if(!id)return alert("作業員IDを入力してください。");
   const db=loadDB(),item={id,name:name||id,site:$("workerSite").value.trim(),team:$("workerTeam").value.trim()};
   const i=db.workers.findIndex(w=>w.id===id);i>=0?db.workers[i]={...db.workers[i],...item}:db.workers.push(item);
-  saveDB(db);["workerId","workerName","workerSite","workerTeam"].forEach(x=>$(x).value="");render();
+  saveDB(db);window.HeatCheckCloud?.upsertWorker?.(item);["workerId","workerName","workerSite","workerTeam"].forEach(x=>$(x).value="");render();
 };
 
 async function startCamera(){
@@ -185,12 +185,12 @@ function render(){
   const db=loadDB();
   $("duration").value=db.settings.duration;$("baselineCount").value=db.settings.baselineCount;$("baselineMin").value=db.settings.baselineMin;
   $("workerList").innerHTML=db.workers.map(w=>`<div class="worker-row"><span><strong>${esc(w.name)}</strong><br>${esc(w.id)}／${esc(w.site||"—")}／${esc(w.team||"—")}</span><button data-del="${esc(w.id)}">削除</button></div>`).join("")||"登録なし";
-  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{if(confirm("削除しますか？")){const d=loadDB();d.workers=d.workers.filter(w=>w.id!==b.dataset.del);saveDB(d);render()}});
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(confirm("削除しますか？")){const id=b.dataset.del;const d=loadDB();d.workers=d.workers.filter(w=>w.id!==id);saveDB(d);render();await window.HeatCheckCloud?.deleteWorker?.(id)}});
   const wid=$("historyWorker").value,rows=db.records.filter(r=>!wid||r.workerId===wid);
   $("historyList").innerHTML=rows.length?`<table><thead><tr><th>日時</th><th>作業員</th><th>判定</th><th>疲労</th><th>寝不足</th><th>体調変化</th><th>集中力</th></tr></thead><tbody>${rows.slice(0,100).map(r=>`<tr><td>${new Date(r.createdAt).toLocaleString("ja-JP")}</td><td>${esc(r.workerName)}</td><td>${LEVELS[r.level]}</td><td>${riskToScore(r.conditionAI?.fatigueRisk||0)}</td><td>${riskToScore(r.conditionAI?.sleepRisk||0)}</td><td>${riskToScore(r.conditionAI?.conditionRisk||0)}</td><td>${riskToScore(r.conditionAI?.focusRisk||0)}</td></tr>`).join("")}</tbody></table>`:"履歴なし";
 }
 $("historyWorker").onchange=render;
-$("saveSettings").onclick=()=>{const db=loadDB();db.settings.duration=clamp(Number($("duration").value)||10,8,30);db.settings.baselineCount=clamp(Number($("baselineCount").value)||10,3,30);db.settings.baselineMin=clamp(Number($("baselineMin").value)||5,3,10);saveDB(db);alert("保存しました。")};
+$("saveSettings").onclick=()=>{const db=loadDB();db.settings.duration=clamp(Number($("duration").value)||10,8,30);db.settings.baselineCount=clamp(Number($("baselineCount").value)||10,3,30);db.settings.baselineMin=clamp(Number($("baselineMin").value)||5,3,10);saveDB(db);window.HeatCheckCloud?.saveSettings?.(db.settings);alert("保存しました。")};
 function download(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 $("exportJson").onclick=()=>download("heat-check-v12-stage4-backup.json",JSON.stringify(loadDB(),null,2),"application/json");
 $("importJson").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!Array.isArray(x.records)||!Array.isArray(x.workers))throw Error();saveDB({...defaults(),...x});render();alert("復元しました。")}catch{alert("復元できません。")}};rd.readAsText(f);e.target.value=""};

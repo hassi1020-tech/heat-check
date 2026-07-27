@@ -1,11 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /organizations/company001/{document=**} {
-      allow read, write: if request.auth != null;
+    function signedIn() {
+      return request.auth != null;
     }
-    match /{document=**} {
-      allow read, write: if false;
+
+    function ownsPersonalWorkspace(workspaceId) {
+      return signedIn() && workspaceId == request.auth.uid;
+    }
+
+    function sharedWorkspaceMember(workspaceId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/heatCheckWorkspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+
+    match /heatCheckWorkspaces/{workspaceId} {
+      allow read, write: if ownsPersonalWorkspace(workspaceId) || sharedWorkspaceMember(workspaceId);
+
+      match /{document=**} {
+        allow read, write: if ownsPersonalWorkspace(workspaceId) || sharedWorkspaceMember(workspaceId);
+      }
     }
   }
 }
