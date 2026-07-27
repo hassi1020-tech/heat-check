@@ -1,7 +1,7 @@
 {
-  "name": "現場 AIコンディションチェック Ver.11.2",
+  "name": "現場 AIコンディションチェック Ver.11.2 第4.1",
   "short_name": "AIコンディション",
-  "start_url": "./?v=1102s4",
+  "start_url": "./?v=1102s41",
   "display": "standalone",
   "background_color": "#f3f7f7",
   "theme_color": "#0f766e",

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <title>現場 AIコンディションチェック Ver.11.2</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1102s4">
-  <link rel="stylesheet" href="styles.css?v=1102s4">
+  <link rel="manifest" href="manifest.webmanifest?v=1102s41">
+  <link rel="stylesheet" href="styles.css?v=1102s41">
 </head>
 <body>
 <header class="app-header">
@@ -14,7 +14,7 @@
     <h1>現場 AIコンディションチェック</h1>
     <p>非接触スクリーニング／顔状態チェック</p>
   </div>
-  <span class="version">Ver.11.2</span>
+  <span class="version">Ver.11.2 第4.1</span>
 </header>
 
 <nav class="tabs" aria-label="画面切替">
@@ -121,8 +121,25 @@
 </section>
 
 
-<section id="view-admin-summary" class="view admin-summary-view">
-  <div class="section-head">
+<section id="view-validation" class="view">
+  <article class="card">
+    <h2>実証評価記録</h2>
+    <p class="note">測定結果に対する管理者の所見を追記します。記録は測定データと同じIDで保存されます。</p>
+    <div class="filters">
+      <select id="validationWorker"><option value="">すべての作業員</option></select>
+      <select id="validationPending">
+        <option value="all">すべて</option>
+        <option value="pending">未評価のみ</option>
+        <option value="done">評価済みのみ</option>
+      </select>
+    </div>
+    <div id="validationList" class="record-list"></div>
+  </article>
+</section>
+
+<section id="view-dashboard" class="view">
+  <div class="admin-summary-view">
+<div class="section-head">
     <div>
       <p class="eyebrow">ADMIN SUMMARY</p>
       <h2>管理者ダッシュボード</h2>
@@ -249,25 +266,9 @@
       <p class="small-note">画像・動画は出力されません。数値、判定、入力情報のみを扱います。</p>
     </article>
   </div>
-</section>
+  </div>
 
-<section id="view-validation" class="view">
-  <article class="card">
-    <h2>実証評価記録</h2>
-    <p class="note">測定結果に対する管理者の所見を追記します。記録は測定データと同じIDで保存されます。</p>
-    <div class="filters">
-      <select id="validationWorker"><option value="">すべての作業員</option></select>
-      <select id="validationPending">
-        <option value="all">すべて</option>
-        <option value="pending">未評価のみ</option>
-        <option value="done">評価済みのみ</option>
-      </select>
-    </div>
-    <div id="validationList" class="record-list"></div>
-  </article>
-</section>
 
-<section id="view-dashboard" class="view">
   <div class="summary-grid">
     <div class="summary-card"><span>測定件数</span><strong id="dashTotal">0</strong></div>
     <div class="summary-card"><span>注意以上</span><strong id="dashAlert">0</strong></div>
@@ -367,8 +368,8 @@
 </main>
 
 <footer>
-  Prototype Ver.11.2／非接触スクリーニング。医療診断には使用できません。
+  Prototype Ver.11.2 第4.1／非接触スクリーニング。医療診断には使用できません。
 </footer>
-<script src="app.js?v=1102s4"></script>
+<script src="app.js?v=1102s41"></script>
 </body>
 </html>

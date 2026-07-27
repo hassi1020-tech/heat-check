@@ -31,7 +31,7 @@ function switchView(name){
   document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+name));
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.view===name));
   if(name==="validation")renderValidation();
-  if(name==="dashboard")renderDashboard();
+  if(name==="dashboard"){renderDashboard();renderAdminDashboard();}
   if(name==="worker")renderWorkerCard();
   if(name==="master")renderMaster();
 }
@@ -309,118 +309,63 @@ function init(){
 }
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 init();
-console.info("現場 AIコンディションチェック Ver.11.2 第4段階 読込完了");
+console.info("現場 AIコンディションチェック Ver.11.2 第4.1 完全修正版 読込完了");
+
 
 /* =========================================================
-   Ver.11.2 第3段階：管理者ダッシュボード・データ管理
+   Ver.11.2 第4.1 完全修正版
+   管理者ダッシュボードと現場運用マスタ共有を
+   単一DB（heatCheckV11）へ統合
    ========================================================= */
 
-const ADMIN_STORAGE_KEYS = {
-  workers: ["workers", "heatCheckWorkers", "workerMaster"],
-  records: ["records", "measurements", "heatCheckRecords", "measurementHistory"],
-  sites: ["sites", "heatCheckSites", "siteMaster"],
-  teams: ["teams", "heatCheckTeams", "teamMaster"]
-};
-
-function readFirstArray(keys){
-  for(const key of keys){
-    try{
-      const value = JSON.parse(localStorage.getItem(key) || "null");
-      if(Array.isArray(value)) return value;
-    }catch(_){}
-  }
-  return [];
-}
-
-function adminWorkers(){
-  if(typeof loadWorkers === "function"){
-    try{
-      const value = loadWorkers();
-      if(Array.isArray(value)) return value;
-    }catch(_){}
-  }
-  return readFirstArray(ADMIN_STORAGE_KEYS.workers);
-}
-
-function adminRecords(){
-  if(typeof loadRecords === "function"){
-    try{
-      const value = loadRecords();
-      if(Array.isArray(value)) return value;
-    }catch(_){}
-  }
-  return readFirstArray(ADMIN_STORAGE_KEYS.records);
-}
-
-function recordLevel(record){
-  return record.level || record.result?.level || record.judgement || record.status || "green";
-}
+const MASTER_META_KEY = "heatCheckMasterMeta";
 
 function recordDate(record){
-  const raw = record.createdAt || record.date || record.timestamp || record.measuredAt;
-  const date = raw ? new Date(raw) : new Date(0);
+  const date = new Date(record?.createdAt || 0);
   return Number.isNaN(date.getTime()) ? new Date(0) : date;
 }
-
-function recordWorkerId(record){
-  return String(record.workerId || record.worker?.id || record.workerCode || "");
-}
-
-function recordWorkerName(record){
-  return record.workerName || record.worker?.name || record.name || "未登録";
-}
-
-function recordConfidence(record){
-  const raw = record.confidence ?? record.result?.confidence;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
-}
-
 function sameLocalDate(a,b){
   return a.getFullYear()===b.getFullYear()
     && a.getMonth()===b.getMonth()
     && a.getDate()===b.getDate();
 }
-
-function levelLabel(level){
-  return LEVELS[level]?.label || level || "—";
-}
-
-function levelRank(level){
-  return LEVELS[level]?.rank ?? 0;
-}
-
 function formatAdminDate(date){
   if(!(date instanceof Date) || Number.isNaN(date.getTime())) return "日時不明";
   return new Intl.DateTimeFormat("ja-JP",{
     month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"
   }).format(date);
 }
+function levelLabel(level){
+  return LEVELS[level]?.label || "—";
+}
+function levelRank(level){
+  return LEVELS[level]?.rank ?? 0;
+}
 
 function renderAdminDashboard(){
-  const records = adminRecords().slice().sort((a,b)=>recordDate(b)-recordDate(a));
-  const workers = adminWorkers();
+  const db = loadDB();
+  const records = [...db.records].sort((a,b)=>recordDate(b)-recordDate(a));
   const today = new Date();
-  const todayRecords = records.filter(record=>sameLocalDate(recordDate(record),today));
-  const alertRecords = todayRecords.filter(record=>levelRank(recordLevel(record))>=1);
-  const confidences = todayRecords.map(recordConfidence).filter(v=>v!==null);
+  const todayRecords = records.filter(r=>sameLocalDate(recordDate(r),today));
+  const alertRecords = todayRecords.filter(r=>levelRank(r.level)>=1);
+  const confidences = todayRecords
+    .map(r=>Number(r.confidence))
+    .filter(Number.isFinite);
   const average = confidences.length
-    ? Math.round(confidences.reduce((sum,v)=>sum+v,0)/confidences.length)
+    ? Math.round(confidences.reduce((a,b)=>a+b,0)/confidences.length)
     : null;
 
-  const todayEl = $("adminTodayCount");
-  if(!todayEl) return;
+  if(!$("adminTodayCount")) return;
 
-  todayEl.textContent = todayRecords.length;
+  $("adminTodayCount").textContent = todayRecords.length;
   $("adminAlertCount").textContent = alertRecords.length;
-  $("adminWorkerCount").textContent = workers.length;
+  $("adminWorkerCount").textContent = db.workers.length;
   $("adminAverageConfidence").textContent = average ?? "—";
 
   const counts = {green:0,yellow:0,orange:0,red:0};
-  for(const record of todayRecords){
-    const level = recordLevel(record);
-    if(level in counts) counts[level]++;
-  }
+  todayRecords.forEach(r=>{
+    if(r.level in counts) counts[r.level]++;
+  });
 
   $("adminLevelSummary").innerHTML = Object.entries(counts).map(([level,count])=>`
     <div class="level-summary-row ${level}">
@@ -429,562 +374,288 @@ function renderAdminDashboard(){
     </div>
   `).join("");
 
-  const recentAlerts = records
-    .filter(record=>levelRank(recordLevel(record))>=1)
-    .slice(0,8);
-
+  const recentAlerts = records.filter(r=>levelRank(r.level)>=1).slice(0,8);
   $("adminRecentAlerts").innerHTML = recentAlerts.length
-    ? recentAlerts.map(record=>`
-      <div class="recent-alert-item ${recordLevel(record)}">
+    ? recentAlerts.map(r=>`
+      <div class="recent-alert-item ${esc(r.level)}">
         <div>
-          <strong>${esc(recordWorkerName(record))}</strong>
-          <span>${esc(formatAdminDate(recordDate(record)))}</span>
+          <strong>${esc(r.workerName || r.workerId || "未登録")}</strong>
+          <span>${esc(formatAdminDate(recordDate(r)))}</span>
         </div>
-        <b>${esc(levelLabel(recordLevel(record)))}</b>
+        <b>${esc(levelLabel(r.level))}</b>
       </div>
     `).join("")
     : '<p class="empty-message">要確認結果はありません。</p>';
 
-  updateAdminWorkerSelect(workers);
-  renderAdminWorkerCard();
-}
-
-function updateAdminWorkerSelect(workers){
   const select = $("adminWorkerSelect");
-  if(!select) return;
-  const current = select.value;
-  const options = ['<option value="">作業員を選択</option>'];
-
-  workers.forEach((worker,index)=>{
-    const id = String(worker.id || worker.workerId || worker.code || index);
-    const name = worker.name || worker.workerName || `作業員${index+1}`;
-    options.push(`<option value="${esc(id)}">${esc(name)}</option>`);
-  });
-
-  select.innerHTML = options.join("");
-  if([...select.options].some(option=>option.value===current)) select.value=current;
+  if(select){
+    const current = select.value;
+    select.innerHTML = '<option value="">作業員を選択</option>' +
+      db.workers.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}（${esc(w.id)}）</option>`).join("");
+    if(db.workers.some(w=>w.id===current)) select.value=current;
+  }
+  renderAdminWorkerCard();
+  renderMasterTransferStatus();
 }
 
 function renderAdminWorkerCard(){
-  const select = $("adminWorkerSelect");
   const card = $("adminWorkerCard");
-  if(!select || !card) return;
+  const select = $("adminWorkerSelect");
+  if(!card || !select) return;
 
-  const workerId = select.value;
-  if(!workerId){
-    card.innerHTML = '<p class="empty-message">作業員を選択してください。</p>';
+  const id = select.value;
+  if(!id){
+    card.innerHTML='<p class="empty-message">作業員を選択してください。</p>';
     return;
   }
 
-  const workers = adminWorkers();
-  const worker = workers.find((item,index)=>
-    String(item.id || item.workerId || item.code || index)===workerId
-  );
-
-  const records = adminRecords()
-    .filter(record=>recordWorkerId(record)===workerId)
+  const db=loadDB();
+  const worker=db.workers.find(w=>w.id===id);
+  const records=db.records
+    .filter(r=>r.workerId===id)
     .sort((a,b)=>recordDate(b)-recordDate(a));
 
-  const name = worker?.name || worker?.workerName || records[0]?.workerName || "作業員";
-  const site = worker?.site || worker?.siteName || "—";
-  const team = worker?.team || worker?.teamName || "—";
-  const latest = records[0];
-  const alertCount = records.filter(record=>levelRank(recordLevel(record))>=1).length;
+  const latest=records[0];
+  const alerts=records.filter(r=>levelRank(r.level)>=1).length;
+  const trend=records.slice(0,10).reverse();
 
-  const trend = records.slice(0,10).reverse();
-  const trendHtml = trend.length
-    ? trend.map(record=>{
-        const level = recordLevel(record);
-        return `<span class="worker-trend-dot ${level}" title="${esc(formatAdminDate(recordDate(record)))}：${esc(levelLabel(level))}"></span>`;
-      }).join("")
-    : '<span class="empty-message">履歴なし</span>';
-
-  card.innerHTML = `
+  card.innerHTML=`
     <div class="worker-card-head">
       <div>
-        <strong>${esc(name)}</strong>
-        <span>現場：${esc(site)}／班：${esc(team)}</span>
+        <strong>${esc(worker?.name||id)}</strong>
+        <span>現場：${esc(worker?.site||"未設定")}／班：${esc(worker?.team||"未設定")}</span>
       </div>
       <b>${records.length}回測定</b>
     </div>
     <div class="worker-card-stats">
-      <div><span>最新判定</span><strong>${latest ? esc(levelLabel(recordLevel(latest))) : "—"}</strong></div>
-      <div><span>注意以上</span><strong>${alertCount}回</strong></div>
-      <div><span>最新測定</span><strong>${latest ? esc(formatAdminDate(recordDate(latest))) : "—"}</strong></div>
+      <div><span>最新判定</span><strong>${latest?esc(levelLabel(latest.level)):"—"}</strong></div>
+      <div><span>注意以上</span><strong>${alerts}回</strong></div>
+      <div><span>最新測定</span><strong>${latest?esc(formatAdminDate(recordDate(latest))):"—"}</strong></div>
     </div>
     <div class="worker-trend">
       <span>直近10回</span>
-      <div>${trendHtml}</div>
+      <div>${trend.length
+        ? trend.map(r=>`<span class="worker-trend-dot ${esc(r.level)}" title="${esc(formatAdminDate(recordDate(r)))}：${esc(levelLabel(r.level))}"></span>`).join("")
+        : '<span class="empty-message">履歴なし</span>'}
+      </div>
     </div>
   `;
 }
 
-function csvCell(value){
-  const text = value==null ? "" : String(value);
-  return `"${text.replace(/"/g,'""')}"`;
-}
-
-function downloadTextFile(filename,text,type){
-  const blob = new Blob([text],{type});
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href=url;
-  anchor.download=filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),500);
-}
-
-function exportAdminCsv(){
-  const records = adminRecords().slice().sort((a,b)=>recordDate(a)-recordDate(b));
-  const header = [
-    "測定日時","作業員ID","作業員名","判定","信頼度",
-    "WBGT","自覚症状","水分補給","測定品質","顔色","左右差","動き"
-  ];
-
-  const rows = records.map(record=>{
-    const indicators = record.indicators || record.result?.indicators || {};
-    return [
-      recordDate(record).toISOString(),
-      recordWorkerId(record),
-      recordWorkerName(record),
-      levelLabel(recordLevel(record)),
-      recordConfidence(record) ?? "",
-      record.wbgt ?? record.result?.wbgt ?? "",
-      record.abnormal ?? record.result?.abnormal ? "あり" : "なし",
-      record.hydration ?? record.result?.hydration ?? "",
-      record.quality ?? record.result?.quality ?? "",
-      indicators.faceColor ?? "",
-      indicators.symmetry ?? "",
-      indicators.movement ?? ""
-    ].map(csvCell).join(",");
-  });
-
-  const csv = "\uFEFF" + [header.map(csvCell).join(","),...rows].join("\r\n");
-  downloadTextFile(
-    `heat-check-records-${new Date().toISOString().slice(0,10)}.csv`,
-    csv,
-    "text/csv;charset=utf-8"
-  );
-}
-
-function exportAdminBackup(){
-  const backup = {
-    app:"現場 AIコンディションチェック",
-    version:"11.2-stage3",
-    exportedAt:new Date().toISOString(),
-    localStorage:{}
-  };
-
-  for(let i=0;i<localStorage.length;i++){
-    const key=localStorage.key(i);
-    backup.localStorage[key]=localStorage.getItem(key);
-  }
-
-  downloadTextFile(
-    `heat-check-backup-${new Date().toISOString().slice(0,10)}.json`,
-    JSON.stringify(backup,null,2),
-    "application/json"
-  );
-}
-
-async function importAdminBackup(event){
-  const file=event.target.files?.[0];
-  if(!file) return;
-
-  try{
-    const backup=JSON.parse(await file.text());
-    if(!backup || typeof backup.localStorage!=="object"){
-      throw new Error("バックアップ形式が正しくありません。");
-    }
-
-    const ok=confirm("現在の保存データをバックアップ内容で置き換えます。実行しますか？");
-    if(!ok) return;
-
-    localStorage.clear();
-    Object.entries(backup.localStorage).forEach(([key,value])=>{
-      localStorage.setItem(key,String(value));
-    });
-
-    alert("データを復元しました。画面を再読み込みします。");
-    location.reload();
-  }catch(error){
-    alert(`復元できませんでした：${error.message}`);
-  }finally{
-    event.target.value="";
-  }
-}
-
-function bindAdminDashboard(){
-  $("refreshAdminSummary")?.addEventListener("click",renderAdminDashboard);
-  $("adminWorkerSelect")?.addEventListener("change",renderAdminWorkerCard);
-  $("exportMeasurementsCsv")?.addEventListener("click",exportAdminCsv);
-  $("exportBackupJson")?.addEventListener("click",exportAdminBackup);
-  $("importBackupJson")?.addEventListener("change",importAdminBackup);
-  renderAdminDashboard();
-}
-
-if(document.readyState==="loading"){
-  document.addEventListener("DOMContentLoaded",bindAdminDashboard);
-}else{
-  bindAdminDashboard();
-}
-
-window.addEventListener("storage",renderAdminDashboard);
-
-
-/* =========================================================
-   Ver.11.2 第4段階：現場運用マスタ端末間共有
-   ========================================================= */
-
-const MASTER_META_KEY = "heatCheckMasterMeta";
-
-const MASTER_DEFINITIONS = {
-  sites: {
-    keys: ["sites", "heatCheckSites", "siteMaster"],
-    idFields: ["id", "siteId", "code"],
-    label: "現場"
-  },
-  teams: {
-    keys: ["teams", "heatCheckTeams", "teamMaster"],
-    idFields: ["id", "teamId", "code"],
-    label: "班"
-  },
-  workers: {
-    keys: ["workers", "heatCheckWorkers", "workerMaster"],
-    idFields: ["id", "workerId", "code"],
-    label: "作業員"
-  },
-  settings: {
-    keys: ["operationSettings", "heatCheckSettings", "settingsMaster"],
-    idFields: ["id", "key", "code"],
-    label: "運用設定"
-  }
-};
-
-function masterReadArray(definition){
-  for(const key of definition.keys){
-    try{
-      const parsed = JSON.parse(localStorage.getItem(key) || "null");
-      if(Array.isArray(parsed)) return {key, data:parsed};
-    }catch(_){}
-  }
-  return {key:definition.keys[0], data:[]};
-}
-
-function masterWriteArray(definition, key, data){
-  const destinationKey = key || definition.keys[0];
-  localStorage.setItem(destinationKey, JSON.stringify(data));
-}
-
-function masterItemId(item, definition, index){
-  for(const field of definition.idFields){
-    const value = item?.[field];
-    if(value !== undefined && value !== null && String(value).trim() !== ""){
-      return String(value);
-    }
-  }
-
-  const name = item?.name || item?.workerName || item?.siteName || item?.teamName;
-  if(name) return `name:${String(name).trim()}`;
-
-  return `index:${index}`;
-}
-
 function getMasterMeta(){
   try{
-    const parsed = JSON.parse(localStorage.getItem(MASTER_META_KEY) || "null");
-    if(parsed && typeof parsed === "object") return parsed;
+    const value=JSON.parse(localStorage.getItem(MASTER_META_KEY)||"null");
+    if(value && typeof value==="object") return value;
   }catch(_){}
-
-  return {
-    masterVersion: "未設定",
-    updatedAt: null,
-    source: "端末保存"
-  };
+  return {masterVersion:"未設定",updatedAt:null,source:"端末保存"};
 }
-
-function createMasterVersion(){
-  const date = new Date();
-  const pad = value => String(value).padStart(2, "0");
-  return [
-    date.getFullYear(),
-    pad(date.getMonth()+1),
-    pad(date.getDate()),
-    "-",
-    pad(date.getHours()),
-    pad(date.getMinutes()),
-    pad(date.getSeconds())
-  ].join("");
-}
-
 function saveMasterMeta(meta){
-  localStorage.setItem(MASTER_META_KEY, JSON.stringify(meta));
+  localStorage.setItem(MASTER_META_KEY,JSON.stringify(meta));
 }
-
-function collectOperationMaster(){
-  const collections = {};
-
-  Object.entries(MASTER_DEFINITIONS).forEach(([name,definition])=>{
-    const result = masterReadArray(definition);
-    collections[name] = {
-      storageKey: result.key,
-      items: result.data
-    };
-  });
-
-  return collections;
+function createMasterVersion(){
+  const d=new Date(), p=v=>String(v).padStart(2,"0");
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
-
-function countMasterItems(collections, name){
-  return Array.isArray(collections?.[name]?.items)
-    ? collections[name].items.length
-    : 0;
-}
-
 function formatMasterDate(value){
   if(!value) return "未設定";
-  const date = new Date(value);
-  if(Number.isNaN(date.getTime())) return "未設定";
-
-  return new Intl.DateTimeFormat("ja-JP",{
-    year:"numeric",
-    month:"2-digit",
-    day:"2-digit",
-    hour:"2-digit",
-    minute:"2-digit"
-  }).format(date);
+  const d=new Date(value);
+  return Number.isNaN(d.getTime()) ? "未設定" :
+    new Intl.DateTimeFormat("ja-JP",{
+      year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"
+    }).format(d);
 }
-
 function renderMasterTransferStatus(){
-  const collections = collectOperationMaster();
-  const meta = getMasterMeta();
+  if(!$("masterVersionDisplay")) return;
+  const db=loadDB(), meta=getMasterMeta();
+  $("masterVersionDisplay").textContent=meta.masterVersion||"未設定";
+  $("masterUpdatedDisplay").textContent=formatMasterDate(meta.updatedAt);
+  $("masterSiteCount").textContent=db.sites.length;
+  $("masterWorkerCount").textContent=db.workers.length;
 
-  const versionEl = $("masterVersionDisplay");
-  if(!versionEl) return;
-
-  versionEl.textContent = meta.masterVersion || "未設定";
-  $("masterUpdatedDisplay").textContent = formatMasterDate(meta.updatedAt);
-  $("masterSiteCount").textContent = countMasterItems(collections, "sites");
-  $("masterWorkerCount").textContent = countMasterItems(collections, "workers");
-
-  const badge = $("masterSyncStatus");
-  badge.textContent = meta.source || "端末保存";
-  badge.className = "master-status-badge";
-
-  if(meta.source === "ファイル取込"){
-    badge.classList.add("imported");
-  }else if(meta.source === "PC作成"){
-    badge.classList.add("pc-created");
-  }
+  const badge=$("masterSyncStatus");
+  badge.textContent=meta.source||"端末保存";
+  badge.className="master-status-badge";
+  if(meta.source==="ファイル取込") badge.classList.add("imported");
+  if(meta.source==="PC作成") badge.classList.add("pc-created");
+}
+function showMasterMessage(type,message){
+  const box=$("masterImportPreview");
+  if(!box) return;
+  box.classList.remove("hidden","success","warning","error");
+  box.classList.add(type);
+  box.textContent=message;
+}
+function selectedMasterImportMode(){
+  return document.querySelector('input[name="masterImportMode"]:checked')?.value || "merge";
+}
+function cloneData(value){
+  return typeof structuredClone==="function"
+    ? structuredClone(value)
+    : JSON.parse(JSON.stringify(value));
+}
+function mergeSimpleValues(current,incoming){
+  return [...new Set([...current,...incoming].map(v=>String(v).trim()).filter(Boolean))];
+}
+function mergeWorkers(current,incoming){
+  const map=new Map(current.map(w=>[normalizeId(w.id),cloneData(w)]));
+  incoming.forEach(w=>{
+    const id=normalizeId(w.id);
+    if(!id) return;
+    map.set(id,{...(map.get(id)||{}),...cloneData(w),id});
+  });
+  return [...map.values()];
 }
 
 function exportOperationMaster(){
-  const collections = collectOperationMaster();
-  const now = new Date().toISOString();
-  const version = createMasterVersion();
+  const db=loadDB();
+  const now=new Date().toISOString();
+  const version=createMasterVersion();
 
-  const payload = {
-    schema: "heat-check-operation-master",
-    schemaVersion: 1,
-    app: "現場 AIコンディションチェック",
-    appVersion: "11.2-stage4",
-    masterVersion: version,
-    updatedAt: now,
-    exportedAt: now,
-    containsMeasurements: false,
-    containsImages: false,
-    master: {}
+  const payload={
+    schema:"heat-check-operation-master",
+    schemaVersion:2,
+    app:"現場 AIコンディションチェック",
+    appVersion:"11.2-stage4.1",
+    masterVersion:version,
+    updatedAt:now,
+    containsMeasurements:false,
+    containsImages:false,
+    master:{
+      sites:cloneData(db.sites),
+      teams:cloneData(db.teams),
+      workers:cloneData(db.workers),
+      settings:cloneData(db.settings)
+    }
   };
 
-  Object.entries(collections).forEach(([name,value])=>{
-    payload.master[name] = value.items;
-  });
-
-  saveMasterMeta({
-    masterVersion: version,
-    updatedAt: now,
-    source: "PC作成"
-  });
-
-  downloadTextFile(
+  saveMasterMeta({masterVersion:version,updatedAt:now,source:"PC作成"});
+  download(
     `heat-check-master-${version}.json`,
-    JSON.stringify(payload, null, 2),
+    JSON.stringify(payload,null,2),
     "application/json"
   );
-
   renderMasterTransferStatus();
   showMasterMessage(
     "success",
-    `マスタを出力しました。現場${payload.master.sites.length}件、班${payload.master.teams.length}件、作業員${payload.master.workers.length}件です。`
+    `マスタを出力しました。現場${db.sites.length}件、班${db.teams.length}件、作業員${db.workers.length}件です。`
   );
 }
 
 function validateMasterPayload(payload){
-  if(!payload || typeof payload !== "object"){
-    throw new Error("JSON形式が正しくありません。");
-  }
+  if(!payload || typeof payload!=="object") throw new Error("JSON形式が正しくありません。");
+  if(payload.schema!=="heat-check-operation-master") throw new Error("現場運用マスタ用ファイルではありません。");
+  if(!payload.master || typeof payload.master!=="object") throw new Error("マスタデータがありません。");
 
-  if(payload.schema !== "heat-check-operation-master"){
-    throw new Error("現場運用マスタ用のファイルではありません。");
-  }
-
-  if(!payload.master || typeof payload.master !== "object"){
-    throw new Error("マスタデータがありません。");
-  }
-
-  const validated = {};
-
-  Object.keys(MASTER_DEFINITIONS).forEach(name=>{
-    const value = payload.master[name];
-    validated[name] = Array.isArray(value) ? value : [];
-  });
-
-  return validated;
-}
-
-function mergeMasterArrays(current, incoming, definition){
-  const result = current.map(item=>structuredCloneSafe(item));
-  const indexMap = new Map();
-
-  result.forEach((item,index)=>{
-    indexMap.set(masterItemId(item,definition,index),index);
-  });
-
-  incoming.forEach((item,index)=>{
-    const cloned = structuredCloneSafe(item);
-    const id = masterItemId(cloned,definition,index);
-
-    if(indexMap.has(id)){
-      result[indexMap.get(id)] = cloned;
-    }else{
-      indexMap.set(id,result.length);
-      result.push(cloned);
-    }
-  });
-
-  return result;
-}
-
-function structuredCloneSafe(value){
-  if(typeof structuredClone === "function"){
-    return structuredClone(value);
-  }
-  return JSON.parse(JSON.stringify(value));
-}
-
-function selectedMasterImportMode(){
-  return document.querySelector(
-    'input[name="masterImportMode"]:checked'
-  )?.value || "merge";
-}
-
-function showMasterMessage(type,message){
-  const box = $("masterImportPreview");
-  if(!box) return;
-
-  box.classList.remove("hidden","success","warning","error");
-  box.classList.add(type);
-  box.textContent = message;
+  return {
+    sites:Array.isArray(payload.master.sites)?payload.master.sites:[],
+    teams:Array.isArray(payload.master.teams)?payload.master.teams:[],
+    workers:Array.isArray(payload.master.workers)?payload.master.workers:[],
+    settings:payload.master.settings && typeof payload.master.settings==="object"
+      ? payload.master.settings
+      : {}
+  };
 }
 
 async function importOperationMaster(event){
-  const file = event.target.files?.[0];
+  const file=event.target.files?.[0];
   if(!file) return;
 
   try{
-    const payload = JSON.parse(await file.text());
-    const incoming = validateMasterPayload(payload);
-    const mode = selectedMasterImportMode();
+    const payload=JSON.parse(await file.text());
+    const master=validateMasterPayload(payload);
+    const mode=selectedMasterImportMode();
 
-    const counts = Object.fromEntries(
-      Object.entries(incoming).map(([name,items])=>[name,items.length])
-    );
-
-    const modeText = mode === "replace"
-      ? "端末内の現場運用マスタをすべて置き換えます。"
-      : "既存マスタへ追加し、同一IDのデータは上書きします。";
-
-    const confirmation = [
-      modeText,
+    const message=[
+      mode==="replace"
+        ? "端末内の運用マスタをすべて置き換えます。"
+        : "既存マスタへ追加し、同一作業員IDは上書きします。",
       "",
-      `現場：${counts.sites}件`,
-      `班：${counts.teams}件`,
-      `作業員：${counts.workers}件`,
-      `運用設定：${counts.settings}件`,
+      `現場：${master.sites.length}件`,
+      `班：${master.teams.length}件`,
+      `作業員：${master.workers.length}件`,
       "",
       "測定履歴は変更されません。",
-      "取込みを実行しますか？"
+      "取り込みを実行しますか？"
     ].join("\n");
+    if(!confirm(message)) return;
 
-    if(!confirm(confirmation)) return;
-
-    Object.entries(MASTER_DEFINITIONS).forEach(([name,definition])=>{
-      const current = masterReadArray(definition);
-      const newData = mode === "replace"
-        ? incoming[name].map(item=>structuredCloneSafe(item))
-        : mergeMasterArrays(current.data,incoming[name],definition);
-
-      masterWriteArray(definition,current.key,newData);
-    });
-
-    const importedAt = new Date().toISOString();
-
-    saveMasterMeta({
-      masterVersion: payload.masterVersion || createMasterVersion(),
-      updatedAt: payload.updatedAt || importedAt,
-      importedAt,
-      source: "ファイル取込",
-      importedFilename: file.name,
-      importMode: mode
-    });
-
-    renderMasterTransferStatus();
-
-    if(typeof renderAdminDashboard === "function"){
-      renderAdminDashboard();
+    const db=loadDB();
+    if(mode==="replace"){
+      db.sites=cloneData(master.sites);
+      db.teams=cloneData(master.teams);
+      db.workers=cloneData(master.workers)
+        .map(w=>({...w,id:normalizeId(w.id)}))
+        .filter(w=>w.id);
+      db.settings={...defaultDB().settings,...cloneData(master.settings)};
+    }else{
+      db.sites=mergeSimpleValues(db.sites,master.sites);
+      db.teams=mergeSimpleValues(db.teams,master.teams);
+      db.workers=mergeWorkers(db.workers,master.workers);
+      db.settings={...db.settings,...cloneData(master.settings)};
     }
 
+    saveDB(db);
+    const now=new Date().toISOString();
+    saveMasterMeta({
+      masterVersion:payload.masterVersion||createMasterVersion(),
+      updatedAt:payload.updatedAt||now,
+      importedAt:now,
+      source:"ファイル取込",
+      importMode:mode,
+      importedFilename:file.name
+    });
+
+    init();
+    renderAdminDashboard();
+    renderMasterTransferStatus();
     showMasterMessage(
       "success",
-      `マスタを取り込みました。取込方式：${mode === "replace" ? "全置換" : "追加・同一ID上書き"}。測定履歴は保持されています。`
+      `マスタを取り込みました。${mode==="replace"?"全置換":"追加・同一ID上書き"}で反映し、測定履歴は保持しています。`
     );
-
     alert("現場運用マスタを反映しました。測定履歴は変更していません。");
   }catch(error){
     showMasterMessage("error",`取込エラー：${error.message}`);
     alert(`マスタを取り込めませんでした：${error.message}`);
   }finally{
-    event.target.value = "";
+    event.target.value="";
   }
 }
 
-function touchMasterMeta(source="端末編集"){
-  const current = getMasterMeta();
-  saveMasterMeta({
-    ...current,
-    masterVersion: createMasterVersion(),
-    updatedAt: new Date().toISOString(),
-    source
-  });
-  renderMasterTransferStatus();
+function exportMeasurementsCsv41(){
+  $("exportCsv").click();
+}
+function exportBackupJson41(){
+  $("exportJson").click();
+}
+async function importBackupJson41(event){
+  const file=event.target.files?.[0];
+  if(!file) return;
+  const dataTransfer=new DataTransfer();
+  dataTransfer.items.add(file);
+  $("importJson").files=dataTransfer.files;
+  $("importJson").dispatchEvent(new Event("change"));
+  event.target.value="";
 }
 
-function bindMasterTransfer(){
+function bindStage41(){
+  $("refreshAdminSummary")?.addEventListener("click",renderAdminDashboard);
+  $("adminWorkerSelect")?.addEventListener("change",renderAdminWorkerCard);
   $("exportMasterJson")?.addEventListener("click",exportOperationMaster);
   $("importMasterJson")?.addEventListener("change",importOperationMaster);
+  $("exportMeasurementsCsv")?.addEventListener("click",exportMeasurementsCsv41);
+  $("exportBackupJson")?.addEventListener("click",exportBackupJson41);
+  $("importBackupJson")?.addEventListener("change",importBackupJson41);
+
+  renderAdminDashboard();
   renderMasterTransferStatus();
 }
 
-if(document.readyState === "loading"){
-  document.addEventListener("DOMContentLoaded",bindMasterTransfer);
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",bindStage41);
 }else{
-  bindMasterTransfer();
+  bindStage41();
 }
-
-window.addEventListener("storage",event=>{
-  if(event.key === MASTER_META_KEY || event.key === null){
-    renderMasterTransferStatus();
-  }
+window.addEventListener("storage",()=>{
+  renderAdminDashboard();
+  renderMasterTransferStatus();
 });

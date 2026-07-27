@@ -489,3 +489,17 @@
     grid-template-columns:1fr;
   }
 }
+
+
+/* Ver.11.2 第4.1 完全修正版 */
+#view-dashboard > .admin-summary-view{
+  margin-bottom:18px;
+}
+#view-dashboard > .admin-summary-view > .section-head{
+  margin-top:0;
+}
+@media(max-width:800px){
+  #view-dashboard .admin-panel-grid{
+    grid-template-columns:1fr;
+  }
+}
