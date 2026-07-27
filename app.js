@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id);
 let stream=null, measuring=false, guideTimer=null;
 
 function defaultDB(){
-  return {version:"11.2",sites:[],teams:[],workers:[],records:[],settings:{duration:10,wbgtYellow:28,wbgtOrange:31},updatedAt:new Date().toISOString()};
+  return {version:"12.0-stage1",sites:[],teams:[],workers:[],records:[],settings:{duration:10,wbgtYellow:28,wbgtOrange:31},updatedAt:new Date().toISOString()};
 }
 function loadDB(){
   try{
@@ -106,11 +106,71 @@ function stopCamera(){
 $("startCamera").onclick=startCamera;$("stopCamera").onclick=stopCamera;
 
 function sampleFrame(){
-  const v=$("camera"),c=document.createElement("canvas"),size=240;c.width=size;c.height=size;
-  const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(v,0,0,size,size);
-  const d=ctx.getImageData(0,0,size,size).data;let sum=0,r=0,g=0,b=0,left=0,right=0,n=0;
-  for(let y=35;y<205;y+=3)for(let x=35;x<205;x+=3){const i=(y*size+x)*4,br=(d[i]+d[i+1]+d[i+2])/3;sum+=br;r+=d[i];g+=d[i+1];b+=d[i+2];if(x<size/2)left+=br;else right+=br;n++;}
-  return {brightness:sum/n,red:r/n,green:g/n,blue:b/n,asymmetry:Math.abs(left-right)/(sum||1)*100};
+  const v=$("camera"),c=document.createElement("canvas"),size=240;
+  c.width=size;c.height=size;
+  const ctx=c.getContext("2d",{willReadFrequently:true});
+  ctx.drawImage(v,0,0,size,size);
+  const image=ctx.getImageData(0,0,size,size);
+  const d=image.data;
+
+  const region=(x1,y1,x2,y2)=>{
+    let r=0,g=0,b=0,brightness=0,count=0,specular=0,saturation=0;
+    const sx=Math.max(0,Math.floor(x1*size)),ex=Math.min(size,Math.ceil(x2*size));
+    const sy=Math.max(0,Math.floor(y1*size)),ey=Math.min(size,Math.ceil(y2*size));
+    for(let y=sy;y<ey;y+=2){
+      for(let x=sx;x<ex;x+=2){
+        const i=(y*size+x)*4,rv=d[i],gv=d[i+1],bv=d[i+2];
+        const max=Math.max(rv,gv,bv),min=Math.min(rv,gv,bv);
+        const br=(rv+gv+bv)/3;
+        r+=rv;g+=gv;b+=bv;brightness+=br;
+        saturation+=max===0?0:(max-min)/max;
+        // 強い白色反射を光沢候補として集計
+        if(br>205 && (max-min)<28)specular++;
+        count++;
+      }
+    }
+    count=Math.max(1,count);
+    const ar=r/count,ag=g/count,ab=b/count;
+    return {
+      red:ar,green:ag,blue:ab,
+      brightness:brightness/count,
+      redness:ar-(ag+ab)/2,
+      saturation:saturation/count*100,
+      specularRatio:specular/count*100
+    };
+  };
+
+  // 顔ガイド内を想定した固定領域。第2段階でFace Landmarkerの座標へ置換予定。
+  const forehead=region(.38,.20,.62,.36);
+  const leftCheek=region(.27,.42,.44,.62);
+  const rightCheek=region(.56,.42,.73,.62);
+  const nose=region(.44,.36,.56,.58);
+  const mouth=region(.39,.62,.61,.76);
+  const face=region(.25,.18,.75,.82);
+
+  const asymmetry=Math.abs(leftCheek.brightness-rightCheek.brightness)/
+    Math.max(1,(leftCheek.brightness+rightCheek.brightness)/2)*100;
+  const cheekRedness=(leftCheek.redness+rightCheek.redness)/2;
+  const pallor=Math.max(0,100-(leftCheek.saturation+rightCheek.saturation)/2);
+  const sweatIndex=Math.min(100,
+    forehead.specularRatio*5.2+nose.specularRatio*3.8+
+    Math.max(0,forehead.brightness-face.brightness)*0.35
+  );
+
+  return {
+    brightness:face.brightness,
+    red:face.red,green:face.green,blue:face.blue,
+    asymmetry,
+    foreheadRedness:forehead.redness,
+    leftCheekRedness:leftCheek.redness,
+    rightCheekRedness:rightCheek.redness,
+    cheekRedness,
+    mouthRedness:mouth.redness,
+    pallor,
+    foreheadGloss:forehead.specularRatio,
+    noseGloss:nose.specularRatio,
+    sweatIndex
+  };
 }
 function startGuideMonitor(){
   if(guideTimer)clearInterval(guideTimer);
@@ -147,6 +207,26 @@ function evaluate(worker,frames){
   const brightness=avg("brightness"),asymmetry=avg("asymmetry");
   const variation=Math.sqrt(frames.reduce((s,x)=>s+(x.brightness-brightness)**2,0)/frames.length);
   const redness=avg("red")-(avg("green")+avg("blue"))/2;
+  const foreheadRedness=avg("foreheadRedness");
+  const leftCheekRedness=avg("leftCheekRedness");
+  const rightCheekRedness=avg("rightCheekRedness");
+  const mouthRedness=avg("mouthRedness");
+  const pallor=avg("pallor");
+  const foreheadGloss=avg("foreheadGloss");
+  const noseGloss=avg("noseGloss");
+  const sweatIndex=avg("sweatIndex");
+  const colorVariation=Math.sqrt(frames.reduce((s,x)=>s+(x.cheekRedness-avg("cheekRedness"))**2,0)/frames.length);
+
+  // 第1段階：顔色・発汗の観察スコア（医療診断ではない）
+  const rednessRisk=Math.min(100,Math.max(0,(Math.abs((leftCheekRedness+rightCheekRedness)/2)-10)*3.2));
+  const pallorRisk=Math.min(100,Math.max(0,(pallor-48)*2.6));
+  const colorAsymmetryRisk=Math.min(100,asymmetry*7);
+  const faceColorRisk=Math.round(
+    rednessRisk*0.45+pallorRisk*0.30+colorAsymmetryRisk*0.15+
+    Math.min(100,colorVariation*6)*0.10
+  );
+  const sweatRisk=Math.round(Math.min(100,Math.max(0,sweatIndex)));
+  const faceAiRisk=Math.round(faceColorRisk*0.75+sweatRisk*0.25);
   const wbgt=Number($("measureWbgt").value)||null,abnormal=$("conditionAbnormal").value==="yes",hydration=$("hydration").value;
   let level="green",reasons=[],actions=[];
   const raise=x=>{if(LEVELS[x].rank>LEVELS[level].rank)level=x;};
@@ -158,7 +238,13 @@ function evaluate(worker,frames){
   if(brightness<45||brightness>220){raise("yellow");reasons.push("撮影環境の明るさが不適切");}
   if(asymmetry>7){raise("yellow");reasons.push("顔の左右差が大きく再測定推奨");}
   if(variation>18){raise("yellow");reasons.push("測定中の動きが大きい");}
-  if(Math.abs(redness)>25){raise("yellow");reasons.push("基準から顔色差が大きい");}
+  if(faceColorRisk>=72){
+    raise("yellow");
+    reasons.push("顔色の複数指標に大きな変化傾向");
+  }else if(faceColorRisk>=48){
+    reasons.push("顔色に軽度の変化傾向");
+  }
+  if(sweatRisk>=75)reasons.push("額・鼻周辺の光沢が増加傾向");
   if(!reasons.length)reasons.push("重大な変化は検出されませんでした");
   actions=level==="red"?["直ちに作業を中止する","涼しい場所で管理者が本人を確認する","必要に応じて救急要請・医療機関へ連絡する"]:
     level==="orange"?["作業を中断して休憩する","水分・塩分を補給する","管理者が本人を確認し再測定する"]:
@@ -179,7 +265,26 @@ function evaluate(worker,frames){
     level,reasons,actions,
     metrics:{brightness:+brightness.toFixed(1),asymmetry:+asymmetry.toFixed(2),motion:+variation.toFixed(2),redness:+redness.toFixed(1)},
     indicators:{faceColor,symmetry,movement,lighting},
-    quality,confidence,wbgt,abnormal,hydration
+    quality,confidence,wbgt,abnormal,hydration,
+    faceAI:{
+      stage:1,
+      overallRisk:faceAiRisk,
+      colorRisk:faceColorRisk,
+      sweatRisk,
+      colorLabel:faceColorRisk>=72?"大きな変化":faceColorRisk>=48?"軽度変化":"通常範囲",
+      sweatLabel:sweatRisk>=75?"増加傾向":sweatRisk>=45?"やや増加":"判定上大きな変化なし",
+      confidence:Math.round(Math.max(20,Math.min(99,qualityScore*0.85+15))),
+      regions:{
+        foreheadRedness:+foreheadRedness.toFixed(1),
+        leftCheekRedness:+leftCheekRedness.toFixed(1),
+        rightCheekRedness:+rightCheekRedness.toFixed(1),
+        mouthRedness:+mouthRedness.toFixed(1),
+        pallor:+pallor.toFixed(1),
+        foreheadGloss:+foreheadGloss.toFixed(2),
+        noseGloss:+noseGloss.toFixed(2)
+      },
+      disclaimer:"顔色・皮膚光沢の変化傾向であり、熱中症・脱水・発汗量の医学的診断ではありません。"
+    }
   };
 }
 async function startMeasure(){
@@ -228,6 +333,15 @@ function showResult(r){
   $("resultQualityText").textContent = r.quality || "中";
   $("resultConfidence").textContent = `${r.confidence ?? 70}%`;
 
+  const faceAI=r.faceAI||{};
+  if($("faceAiOverall")) $("faceAiOverall").textContent=`${Math.max(0,100-(faceAI.overallRisk??0))}点`;
+  if($("faceAiColor")) $("faceAiColor").textContent=`${Math.max(0,100-(faceAI.colorRisk??0))}点`;
+  if($("faceAiColorLabel")) $("faceAiColorLabel").textContent=faceAI.colorLabel||"未解析";
+  if($("faceAiSweat")) $("faceAiSweat").textContent=`${Math.max(0,100-(faceAI.sweatRisk??0))}点`;
+  if($("faceAiSweatLabel")) $("faceAiSweatLabel").textContent=faceAI.sweatLabel||"未解析";
+  if($("faceAiStageNote")) $("faceAiStageNote").textContent=
+    "第1段階では顔色と皮膚光沢を解析します。表情・目・口元は次段階で追加します。";
+
   $("resultReasons").innerHTML = r.reasons.slice(0,5)
     .map(reason => `<li><span class="check-mark">✓</span><span>${esc(reason)}</span></li>`)
     .join("");
@@ -248,7 +362,15 @@ function showResult(r){
     ["明るさ数値", r.metrics?.brightness ?? "—"],
     ["左右差数値", r.metrics?.asymmetry ?? "—"],
     ["動き数値", r.metrics?.motion ?? "—"],
-    ["顔色差数値", r.metrics?.redness ?? "—"]
+    ["顔色差数値", r.metrics?.redness ?? "—"],
+    ["顔AI総合", r.faceAI ? `${Math.max(0,100-r.faceAI.overallRisk)}点` : "—"],
+    ["顔色スコア", r.faceAI ? `${Math.max(0,100-r.faceAI.colorRisk)}点` : "—"],
+    ["発汗傾向スコア", r.faceAI ? `${Math.max(0,100-r.faceAI.sweatRisk)}点` : "—"],
+    ["額の赤み指数", r.faceAI?.regions?.foreheadRedness ?? "—"],
+    ["左頬の赤み指数", r.faceAI?.regions?.leftCheekRedness ?? "—"],
+    ["右頬の赤み指数", r.faceAI?.regions?.rightCheekRedness ?? "—"],
+    ["額の光沢率", r.faceAI?.regions?.foreheadGloss ?? "—"],
+    ["鼻の光沢率", r.faceAI?.regions?.noseGloss ?? "—"]
   ];
 
   $("resultMetrics").innerHTML = detailItems.map(([name,value]) => `
@@ -318,7 +440,7 @@ function drawChart(rows){
 
 $("saveSettings").onclick=()=>{const d=loadDB();d.settings.duration=Math.max(5,Math.min(30,Number($("settingDuration").value)||10));d.settings.wbgtYellow=Number($("settingWbgtYellow").value)||28;d.settings.wbgtOrange=Number($("settingWbgtOrange").value)||31;saveDB(d);setStatus("settingsStatus","設定を保存しました。","success");};
 $("exportJson").onclick=()=>download("heat-check-v11-backup.json",JSON.stringify(loadDB(),null,2),"application/json");
-$("exportCsv").onclick=()=>{const rows=loadDB().records,head=["日時","作業員ID","氏名","現場","作業班","判定","WBGT","体調異常","水分補給","明るさ","左右差","動き","顔色差","実証評価","所見"];const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;const csv="\ufeff"+[head,...rows.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level].label,r.wbgt,r.abnormal?"あり":"なし",r.hydration,r.metrics.brightness,r.metrics.asymmetry,r.metrics.motion,r.metrics.redness,r.validation?.result||"",r.validation?.comment||""])].map(a=>a.map(q).join(",")).join("\n");download("heat-check-v11-records.csv",csv,"text/csv");};
+$("exportCsv").onclick=()=>{const rows=loadDB().records,head=["日時","作業員ID","氏名","現場","作業班","判定","WBGT","体調異常","水分補給","明るさ","左右差","動き","顔色差","顔AI総合点","顔色点","発汗傾向点","実証評価","所見"];const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;const csv="\ufeff"+[head,...rows.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level].label,r.wbgt,r.abnormal?"あり":"なし",r.hydration,r.metrics.brightness,r.metrics.asymmetry,r.metrics.motion,r.metrics.redness,Math.max(0,100-(r.faceAI?.overallRisk??0)),Math.max(0,100-(r.faceAI?.colorRisk??0)),Math.max(0,100-(r.faceAI?.sweatRisk??0)),r.validation?.result||"",r.validation?.comment||""])].map(a=>a.map(q).join(",")).join("\n");download("heat-check-v11-records.csv",csv,"text/csv");};
 $("importJson").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d.records)||!Array.isArray(d.workers))throw new Error();saveDB({...defaultDB(),...d});init();alert("復元しました。");}catch{alert("正しいバックアップファイルではありません。");}};rd.readAsText(f);e.target.value="";};
 $("clearRecords").onclick=()=>{if(!confirm("測定記録と実証評価をすべて削除しますか？"))return;const d=loadDB();d.records=[];saveDB(d);renderDashboard();renderValidation();renderWorkerCard();};
 
@@ -339,7 +461,7 @@ window.HeatCheckApp={
   }
 };
 init();
-console.info("現場 AIコンディションチェック Ver.11.3 撮影端末・管理PC分離版 読込完了");
+console.info("現場 AIコンディションチェック Ver.12.0 第1段階 顔色・発汗解析 読込完了");
 
 
 /* =========================================================

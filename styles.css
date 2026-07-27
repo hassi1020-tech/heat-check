@@ -564,3 +564,23 @@
   .kiosk-welcome-inner{flex-direction:column;align-items:stretch}
   .kiosk-state-box{min-width:0}
 }
+
+
+/* =========================================================
+   Ver.12.0 第1段階：顔色・発汗解析
+   ========================================================= */
+.face-ai-section{background:linear-gradient(180deg,#f8fffe,#fff)}
+.face-ai-heading{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:12px}
+.face-ai-heading h3{border:0!important;padding:0!important;margin:0 0 4px!important}
+.face-ai-note{margin:0;color:#60777b;font-size:.86rem}
+.face-ai-overall{min-width:112px;padding:10px 14px;border-radius:14px;background:#e6f7f4;text-align:center}
+.face-ai-overall span{display:block;color:#4b686d;font-size:.78rem;font-weight:800}
+.face-ai-overall strong{font-size:1.55rem;color:#0f766e}
+.face-ai-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.face-ai-card{padding:13px 10px;border:1px solid #cfe2df;border-radius:12px;background:#fff;text-align:center}
+.face-ai-card span{display:block;min-height:2.5em;color:#4b686d;font-size:.8rem;font-weight:900}
+.face-ai-card strong{display:block;margin:7px 0 3px;font-size:1.35rem}
+.face-ai-card small{color:#60777b}
+.face-ai-card.pending{background:#f4f6f6;opacity:.72;border-style:dashed}
+@media(max-width:850px){.face-ai-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.face-ai-heading{align-items:flex-start}.face-ai-grid{grid-template-columns:1fr 1fr}.face-ai-card:last-child{grid-column:1/-1}}

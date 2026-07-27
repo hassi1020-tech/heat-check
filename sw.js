@@ -1,12 +1,13 @@
-const CACHE="heat-check-v11-1103-kiosk-admin";
+const CACHE="heat-check-v12-stage1-face";
 const FILES=[
   "./",
   "./index.html",
-  "./styles.css?v=1103ka1",
-  "./app.js?v=1103ka1",
-  "./firebase-cloud.js?v=1103ka1",
-  "./device-mode.js?v=1103ka1",
-  "./manifest.webmanifest?v=1103ka1"
+  "./styles.css?v=1200s1",
+  "./app.js?v=1200s1",
+  "./firebase-cloud.js?v=1200s1",
+  "./device-mode.js?v=1200s1",
+  "./face-landmarker.js?v=1200s1",
+  "./manifest.webmanifest?v=1200s1"
 ];
 self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
