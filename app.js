@@ -20,6 +20,18 @@ function loadDB(){
   }catch(e){console.error(e);return defaultDB();}
 }
 function saveDB(db,options={}){
+  // 顔画像・動画・Base64等は保存しない
+  if(Array.isArray(db.records)){
+    db.records=db.records.map(record=>{
+      const safe={...record};
+      [
+        "image","imageData","imageUrl","photo","photoData","photoUrl",
+        "faceImage","faceImageData","faceImageUrl","video","videoData",
+        "thumbnail","snapshot","capture"
+      ].forEach(key=>delete safe[key]);
+      return safe;
+    });
+  }
   db.updatedAt=new Date().toISOString();
   localStorage.setItem(DB_KEY,JSON.stringify(db));
   if(!options.fromCloud && window.CloudBridge?.isReady?.()){
@@ -316,6 +328,7 @@ function init(){
 }
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 window.HeatCheckApp={
+  switchView,
   loadDB,
   saveDB,
   defaultDB,
@@ -326,7 +339,7 @@ window.HeatCheckApp={
   }
 };
 init();
-console.info("現場 AIコンディションチェック Ver.11.3 クラウド第1段階 読込完了");
+console.info("現場 AIコンディションチェック Ver.11.3 撮影端末・管理PC分離版 読込完了");
 
 
 /* =========================================================

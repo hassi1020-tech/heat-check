@@ -116,8 +116,17 @@ function setUserUI(user){
 function sanitizeDocId(value){
   return encodeURIComponent(String(value)).replace(/%/g,"_");
 }
+function sanitizeMeasurement(data){
+  const safe={...data};
+  [
+    "image","imageData","imageUrl","photo","photoData","photoUrl",
+    "faceImage","faceImageData","faceImageUrl","video","videoData",
+    "thumbnail","snapshot","capture"
+  ].forEach(key=>delete safe[key]);
+  return safe;
+}
 function normalizeCloudRecord(data, id){
-  const value={...data,id:data.id||id};
+  const value=sanitizeMeasurement({...data,id:data.id||id});
   delete value._serverUpdatedAt;
   return value;
 }
@@ -212,10 +221,10 @@ async function uploadDatabase(localDB, force=false){
   await syncCollection("sites",localDB.sites||[],x=>x,x=>({name:x}));
   await syncCollection("teams",localDB.teams||[],x=>x,x=>({name:x}));
   await syncCollection("workers",localDB.workers||[],x=>x.id,x=>({...x}));
-  await syncCollection("measurements",localDB.records||[],x=>x.id,x=>({...x}));
+  await syncCollection("measurements",localDB.records||[],x=>x.id,x=>sanitizeMeasurement(x));
   await setDoc(doc(db,`${ROOT}/config/app`),{
     ...(localDB.settings||{}),
-    appVersion:"11.3-cloud-stage1",
+    appVersion:"11.3-kiosk-admin",
     _serverUpdatedAt:serverTimestamp(),
     _updatedBy:currentUser.uid
   },{merge:true});

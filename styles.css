@@ -534,3 +534,33 @@
   .cloud-info-grid{grid-template-columns:1fr}
   .cloud-user{max-width:160px}
 }
+
+
+/* =========================================================
+   Ver.11.3 撮影端末・管理PC分離版
+   ========================================================= */
+.device-mode-switch{display:flex;gap:6px;justify-content:flex-end}
+.device-mode-switch button{border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);color:#fff;padding:6px 11px;border-radius:8px;font-weight:800}
+.device-mode-switch button.active{background:#fff;color:#0f5d63}
+.mode-hidden{display:none!important}
+.kiosk-welcome{margin:14px auto 0;max-width:1180px;padding:0 14px}
+.kiosk-welcome-inner{display:flex;justify-content:space-between;gap:20px;align-items:center;background:linear-gradient(135deg,#e9fbf7,#f6fffd);border:1px solid #bfe4dc;border-radius:16px;padding:20px}
+.kiosk-eyebrow{display:block;font-size:.82rem;font-weight:900;color:#0a6d68;margin-bottom:5px}
+.kiosk-welcome h2{margin:0 0 5px;color:#17343a}
+.kiosk-welcome p{margin:0;color:#557075}
+.kiosk-state-box{min-width:170px;background:#fff;border:1px solid #d6e5e2;border-radius:12px;padding:12px}
+.kiosk-state-box span{display:block;color:#6a7c80;font-size:.75rem}
+.kiosk-state-box strong{display:block;margin-top:4px;overflow-wrap:anywhere}
+.privacy-card{border-left:5px solid #0a8f85;background:#f1fffc}
+.privacy-card strong{color:#08665f}
+.privacy-card p{margin:4px 0 0;color:#4b666a}
+.kiosk-mode .tabs{position:sticky;top:0;z-index:20}
+.kiosk-mode .tabs [data-view]:not([data-view="measure"]){display:none!important}
+.kiosk-mode #view-measure{max-width:900px;margin-left:auto;margin-right:auto}
+.kiosk-mode .app-footer{display:none}
+.kiosk-mode .header-right{width:100%}
+.kiosk-mode .device-mode-switch{justify-content:flex-start}
+@media(max-width:700px){
+  .kiosk-welcome-inner{flex-direction:column;align-items:stretch}
+  .kiosk-state-box{min-width:0}
+}

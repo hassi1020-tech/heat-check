@@ -1,58 +1,69 @@
-# 現場 AIコンディションチェック Ver.11.3 クラウド第1段階
+# 現場 AIコンディションチェック Ver.11.3
+## 撮影端末・管理PC分離版
 
-## 構成
-Cloud Firestoreを正式な保存先とし、端末内LocalStorageはオフライン時のキャッシュ・一時保存として利用します。
+熱中症チェック単体の運用に特化しています。
 
-同期対象:
-- 現場マスタ
-- 作業班マスタ
-- 作業員マスタ
-- 測定設定
-- 測定結果
-- 実証評価
+## 運用構成
 
-顔画像・動画は保存しません。
+### 撮影端末
+URL:
+https://hassi1020-tech.github.io/heat-check/?mode=kiosk&v=1103ka1
 
-## GitHub Pagesへの反映
-ZIPを展開し、リポジトリ直下へ全ファイルを上書きしてください。
+表示機能:
+- 作業員選択
+- カメラ解析
+- 体調・水分・WBGT入力
+- 判定結果
+- クラウド同期状態
 
-確認URL:
-https://hassi1020-tech.github.io/heat-check/?v=1103c1
+非表示機能:
+- マスタ管理
+- 管理者ダッシュボード
+- 設定変更
+- CSV・JSON出力
+- 全履歴管理
 
-## Firebaseで必ず行う設定
+### 管理PC
+URL:
+https://hassi1020-tech.github.io/heat-check/?mode=admin&v=1103ka1
 
-### 1. 承認済みドメイン
-Firebase Console:
-Authentication → 設定 → 承認済みドメイン
+表示機能:
+- 現場・班・作業員マスタ
+- 測定結果一覧
+- 管理者ダッシュボード
+- 設定
+- CSV・JSON出力
+- クラウド同期管理
 
-次を追加:
-hassi1020-tech.github.io
+## 顔写真について
+顔写真・動画・スクリーンショット・Base64画像は保存しません。
+カメラ映像は端末内で解析し、Firestoreには以下のみ保存します。
 
-### 2. Firestoreルール
-Firebase Console:
-Firestore → ルール
+- 作業員ID
+- 氏名
+- 現場
+- 班
+- 測定日時
+- WBGT
+- 体調申告
+- 水分補給状況
+- AI解析結果
+- 信頼度
+- 総合判定
+- 端末ID
 
-同梱の `firestore.rules` の内容を貼り付けて「公開」してください。
+## 初回運用
+1. GitHubへ全ファイルを上書き
+2. 管理PCで `?mode=admin` を開く
+3. Googleログイン
+4. 既存端末データがある場合は「端末データをクラウドへ反映」
+5. 撮影端末で `?mode=kiosk` を開く
+6. Googleログイン
+7. 作業員一覧が同期されることを確認
+8. テスト測定し、管理PCに即時反映されることを確認
 
-この第1段階のルールは、Googleログイン済みユーザーに `company001` の読み書きを許可します。
-試験運用向けです。本番運用前にユーザー・役割・現場単位のアクセス制限へ変更してください。
-
-### 3. 初回移行
-1. 既存データが入っているPCでGoogleログイン
-2. 設定・データ画面を開く
-3. 「端末データをクラウドへ反映」をクリック
-4. スマホで同じGoogleアカウントへログイン
-5. 数秒後にマスタと測定履歴が自動表示されることを確認
-
-## データ構造
-organizations/company001/
-- sites
-- teams
-- workers
-- measurements
-- config/app
-
-## 注意
-- 初回ログイン時、Firestore側が空の場合は、先に「端末データをクラウドへ反映」を実行してください。
-- 同じGoogleアカウントでなくても、現行ルールではGoogleログイン済みであればアクセスできます。
-- 本番版では、usersコレクションと権限ルールを追加します。
+## Firebase
+既存設定をそのまま利用します。
+- projectId: sample1-8011f
+- Authentication: Google
+- Firestore: organizations/company001

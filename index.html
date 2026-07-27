@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <title>現場 AIコンディションチェック Ver.11.3</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1103c1">
-  <link rel="stylesheet" href="styles.css?v=1103c1">
+  <link rel="manifest" href="manifest.webmanifest?v=1103ka1">
+  <link rel="stylesheet" href="styles.css?v=1103ka1">
 </head>
 <body>
 <header class="app-header">
@@ -15,7 +15,11 @@
     <p>非接触スクリーニング／顔状態チェック</p>
   </div>
   <div class="header-right">
-      <span class="version">Ver.11.3 クラウド第1段階</span>
+      <span class="version">Ver.11.3 撮影端末・管理PC分離版</span>
+      <div class="device-mode-switch" aria-label="端末モード">
+        <button id="modeKioskButton" type="button">撮影端末</button>
+        <button id="modeAdminButton" type="button">管理PC</button>
+      </div>
       <div class="cloud-auth">
         <span id="cloudStatus" class="cloud-status offline">未接続</span>
         <span id="cloudUser" class="cloud-user">未ログイン</span>
@@ -25,13 +29,27 @@
     </div>
 </header>
 
+<section id="kioskWelcome" class="kiosk-welcome hidden">
+  <div class="kiosk-welcome-inner">
+    <div>
+      <span class="kiosk-eyebrow">撮影端末モード</span>
+      <h2>作業員を選択して測定を開始してください</h2>
+      <p>顔写真・動画は保存しません。解析結果と測定記録のみクラウドへ保存します。</p>
+    </div>
+    <div class="kiosk-state-box">
+      <span>端末ID</span>
+      <strong id="kioskDeviceId">—</strong>
+    </div>
+  </div>
+</section>
+
 <nav class="tabs" aria-label="画面切替">
-  <button class="tab active" data-view="measure">かんたん測定</button>
-  <button class="tab" data-view="validation">実証評価記録</button>
-  <button class="tab" data-view="dashboard">管理者ダッシュボード</button>
+  <button class="tab active" data-view="measure" data-role="measure-only">かんたん測定</button>
+  <button class="tab" data-view="validation" data-role="admin-only">実証評価記録</button>
+  <button class="tab" data-view="dashboard" data-role="admin-only">管理者ダッシュボード</button>
   <button class="tab" data-view="worker">作業員別カルテ</button>
-  <button class="tab" data-view="master">現場運用マスタ</button>
-  <button class="tab" data-view="settings">設定・データ</button>
+  <button class="tab" data-view="master" data-role="admin-only">現場運用マスタ</button>
+  <button class="tab" data-view="settings" data-role="admin-only">設定・データ</button>
 </nav>
 
 <main>
@@ -397,9 +415,10 @@
 </main>
 
 <footer>
-  Prototype Ver.11.3 クラウド第1段階／非接触スクリーニング。医療診断には使用できません。
+  Prototype Ver.11.3 撮影端末・管理PC分離版／非接触スクリーニング。医療診断には使用できません。
 </footer>
-<script src="app.js?v=1103c1"></script>
-<script type="module" src="firebase-cloud.js?v=1103c1"></script>
+<script src="app.js?v=1103ka1"></script>
+<script type="module" src="firebase-cloud.js?v=1103ka1"></script>
+<script src="device-mode.js?v=1103ka1"></script>
 </body>
 </html>
