@@ -1,924 +1,202 @@
 "use strict";
-const DB_KEY="heatCheckV11";
-const LEVELS={green:{label:"通常",rank:0},yellow:{label:"注意",rank:1},orange:{label:"警戒",rank:2},red:{label:"作業中止",rank:3}};
+const DB_KEY="heatCheckV12";
+const LEVELS={green:"通常",yellow:"注意",orange:"警戒",red:"作業中止"};
 const $=id=>document.getElementById(id);
-let stream=null, measuring=false, guideTimer=null;
+const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
+const mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let stream=null,measuring=false;
 
-function defaultDB(){
-  return {version:"12.0-stage3",sites:[],teams:[],workers:[],records:[],settings:{duration:10,wbgtYellow:28,wbgtOrange:31},updatedAt:new Date().toISOString()};
-}
-function loadDB(){
-  try{
-    const raw=JSON.parse(localStorage.getItem(DB_KEY)||"{}");
-    const db={...defaultDB(),...raw};
-    db.sites=Array.isArray(db.sites)?db.sites:[];
-    db.teams=Array.isArray(db.teams)?db.teams:[];
-    db.workers=Array.isArray(db.workers)?db.workers:[];
-    db.records=Array.isArray(db.records)?db.records:[];
-    db.settings={...defaultDB().settings,...(db.settings||{})};
-    return db;
-  }catch(e){console.error(e);return defaultDB();}
-}
-function saveDB(db,options={}){
-  // 顔画像・動画・Base64等は保存しない
-  if(Array.isArray(db.records)){
-    db.records=db.records.map(record=>{
-      const safe={...record};
-      [
-        "image","imageData","imageUrl","photo","photoData","photoUrl",
-        "faceImage","faceImageData","faceImageUrl","video","videoData",
-        "thumbnail","snapshot","capture"
-      ].forEach(key=>delete safe[key]);
-      return safe;
-    });
-  }
-  db.updatedAt=new Date().toISOString();
-  localStorage.setItem(DB_KEY,JSON.stringify(db));
-  if(!options.fromCloud && window.CloudBridge?.isReady?.()){
-    window.CloudBridge.queueSave(db);
-  }
-  window.dispatchEvent(new CustomEvent("heatcheck:localdbchanged",{detail:{fromCloud:!!options.fromCloud}}));
-}
-function uid(){return (crypto.randomUUID?.()||Date.now()+"-"+Math.random().toString(16).slice(2));}
-function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-function normalizeId(v){return String(v||"").trim().replace(/\u3000/g,"").replace(/\s+/g,"").toUpperCase();}
-function fmtDate(iso){return new Date(iso).toLocaleString("ja-JP");}
-function setStatus(id,msg,type=""){const e=$(id);e.textContent=msg;e.className="status "+type;}
-function download(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function defaults(){return {version:"12.0-stage4",workers:[],records:[],settings:{duration:10,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
+function loadDB(){try{const x=JSON.parse(localStorage.getItem(DB_KEY)||"{}");return {...defaults(),...x,workers:Array.isArray(x.workers)?x.workers:[],records:Array.isArray(x.records)?x.records:[],settings:{...defaults().settings,...x.settings}}}catch{return defaults()}}
+function saveDB(db){localStorage.setItem(DB_KEY,JSON.stringify({...db,updatedAt:new Date().toISOString()}));window.dispatchEvent(new CustomEvent("heatcheck:updated"))}
+const uid=()=>crypto.randomUUID?.()||Date.now()+"-"+Math.random();
+const scoreLabel=r=>r>=70?"大きな変化":r>=45?"軽度変化":"通常範囲";
+const riskToScore=r=>Math.round(clamp(100-r));
 
-function switchView(name){
-  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+name));
-  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.view===name));
-  if(name==="validation")renderValidation();
-  if(name==="dashboard"){renderDashboard();renderAdminDashboard();}
-  if(name==="worker")renderWorkerCard();
-  if(name==="master")renderMaster();
-}
-document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===b));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+b.dataset.view));
+  render();
+});
 
-function renderAllSelectors(){
-  const db=loadDB();
-  const workerOptions=db.workers.filter(w=>w.active!==false).sort((a,b)=>a.id.localeCompare(b.id,"ja"))
-    .map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}（${esc(w.id)}）</option>`).join("");
-  ["measureWorker","workerCardSelect"].forEach(id=>{const el=$(id),v=el.value;el.innerHTML='<option value="">作業員を選択</option>'+workerOptions;if(db.workers.some(w=>w.id===v))el.value=v;});
-  const vw=$("validationWorker"),vv=vw.value;vw.innerHTML='<option value="">すべての作業員</option>'+workerOptions;if(db.workers.some(w=>w.id===vv))vw.value=vv;
-  const sites=db.sites.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
-  const teams=db.teams.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
-  [["workerSite","未設定",sites],["workerTeam","未設定",teams]].forEach(([id,blank,opts])=>{const e=$(id),v=e.value;e.innerHTML=`<option value="">${blank}</option>`+opts;if([...e.options].some(o=>o.value===v))e.value=v;});
+function workerOptions(){
+  const db=loadDB(),opts=db.workers.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}（${esc(w.id)}）</option>`).join("");
+  ["measureWorker","historyWorker"].forEach(id=>{const e=$(id),v=e.value;e.innerHTML=`<option value="">${id==="measureWorker"?"作業員を選択":"全員"}</option>`+opts;e.value=v});
 }
-function renderMaster(){
-  const db=loadDB();renderAllSelectors();
-  $("siteList").innerHTML=db.sites.length?db.sites.map((x,i)=>`<div class="master-item"><span>${esc(x)}</span><button data-del-site="${i}">削除</button></div>`).join(""):"現場は未登録です。";
-  $("teamList").innerHTML=db.teams.length?db.teams.map((x,i)=>`<div class="master-item"><span>${esc(x)}</span><button data-del-team="${i}">削除</button></div>`).join(""):"作業班は未登録です。";
-  $("workerList").innerHTML=db.workers.length?db.workers.map(w=>`<div class="master-item"><span><strong>${esc(w.id)}</strong> ${esc(w.name||w.id)}<br><small>${esc(w.site||"現場未設定")}／${esc(w.team||"班未設定")}</small></span><span><button data-edit-worker="${esc(w.id)}">編集</button> <button data-del-worker="${esc(w.id)}">削除</button></span></div>`).join(""):"作業員は未登録です。";
-  document.querySelectorAll("[data-del-site]").forEach(b=>b.onclick=()=>{const d=loadDB();d.sites.splice(Number(b.dataset.delSite),1);saveDB(d);renderMaster();});
-  document.querySelectorAll("[data-del-team]").forEach(b=>b.onclick=()=>{const d=loadDB();d.teams.splice(Number(b.dataset.delTeam),1);saveDB(d);renderMaster();});
-  document.querySelectorAll("[data-del-worker]").forEach(b=>b.onclick=()=>{if(!confirm("作業員を削除しますか？"))return;const d=loadDB();d.workers=d.workers.filter(w=>w.id!==b.dataset.delWorker);saveDB(d);renderMaster();renderAllSelectors();});
-  document.querySelectorAll("[data-edit-worker]").forEach(b=>b.onclick=()=>{const w=loadDB().workers.find(x=>x.id===b.dataset.editWorker);if(!w)return;$("workerId").value=w.id;$("workerName").value=w.name||"";$("workerSite").value=w.site||"";$("workerTeam").value=w.team||"";});
-}
-$("addSite").onclick=()=>{const v=$("siteName").value.trim();if(!v)return setStatus("siteStatus","現場名を入力してください。","error");const d=loadDB();if(!d.sites.includes(v))d.sites.push(v);saveDB(d);$("siteName").value="";setStatus("siteStatus","追加完了："+v,"success");renderMaster();};
-$("addTeam").onclick=()=>{const v=$("teamName").value.trim();if(!v)return setStatus("teamStatus","作業班名を入力してください。","error");const d=loadDB();if(!d.teams.includes(v))d.teams.push(v);saveDB(d);$("teamName").value="";setStatus("teamStatus","追加完了："+v,"success");renderMaster();};
-$("saveWorker").onclick=()=>{const id=normalizeId($("workerId").value);if(!id)return setStatus("workerStatus","作業員IDを入力してください。","error");const d=loadDB();const item={id,name:$("workerName").value.trim()||id,site:$("workerSite").value,team:$("workerTeam").value,active:true};const i=d.workers.findIndex(w=>w.id===id);if(i>=0)d.workers[i]={...d.workers[i],...item};else d.workers.push(item);saveDB(d);setStatus("workerStatus","登録完了："+item.name+"（"+id+"）","success");$("workerId").value="";$("workerName").value="";renderMaster();renderAllSelectors();};
+$("measureWorker").onchange=()=>{const w=loadDB().workers.find(x=>x.id===$("measureWorker").value);$("workerInfo").textContent=w?`${w.name}／${w.site||"現場未設定"}／${w.team||"班未設定"}`:"作業員を選択してください。"};
 
-$("measureWorker").onchange=()=>{const w=loadDB().workers.find(x=>x.id===$("measureWorker").value);$("measureWorkerInfo").textContent=w?`${w.name}／${w.site||"現場未設定"}／${w.team||"班未設定"}`:"作業員を選択してください。";};
+$("saveWorker").onclick=()=>{
+  const id=$("workerId").value.trim().toUpperCase(),name=$("workerName").value.trim();
+  if(!id)return alert("作業員IDを入力してください。");
+  const db=loadDB(),item={id,name:name||id,site:$("workerSite").value.trim(),team:$("workerTeam").value.trim()};
+  const i=db.workers.findIndex(w=>w.id===id);i>=0?db.workers[i]={...db.workers[i],...item}:db.workers.push(item);
+  saveDB(db);["workerId","workerName","workerSite","workerTeam"].forEach(x=>$(x).value="");render();
+};
 
 async function startCamera(){
   try{
-    if(!navigator.mediaDevices?.getUserMedia)throw new Error("このブラウザではカメラを利用できません");
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720},height:{ideal:720}},audio:false});
     $("camera").srcObject=stream;await $("camera").play();
     $("startCamera").disabled=true;$("startMeasure").disabled=false;$("stopCamera").disabled=false;
-    $("cameraMessage").textContent="顔を中央に合わせてください。";
-    startGuideMonitor();
-  }catch(e){$("cameraMessage").textContent="カメラ開始エラー："+(e.message||e);}
+    $("cameraMessage").textContent="顔を正面に向けて枠内に合わせてください。";$("faceGuide").classList.add("ok");
+  }catch(e){$("cameraMessage").textContent="カメラ開始エラー："+e.message}
 }
-function stopCamera(){
-  if(guideTimer){clearInterval(guideTimer);guideTimer=null;}
-  stream?.getTracks().forEach(t=>t.stop());
-  stream=null;
-  $("camera").srcObject=null;
-  $("startCamera").disabled=false;
-  $("startMeasure").disabled=true;
-  $("stopCamera").disabled=true;
-  $("faceGuide").classList.remove("guide-ok","guide-warn");
-  $("cameraMessage").textContent="カメラを開始してください。";
-}
+function stopCamera(){stream?.getTracks().forEach(t=>t.stop());stream=null;$("camera").srcObject=null;$("startCamera").disabled=false;$("startMeasure").disabled=true;$("stopCamera").disabled=true;$("cameraMessage").textContent="カメラを開始してください。"}
 $("startCamera").onclick=startCamera;$("stopCamera").onclick=stopCamera;
 
-function sampleFrame(){
-  const v=$("camera"),c=document.createElement("canvas"),size=240;
-  c.width=size;c.height=size;
-  const ctx=c.getContext("2d",{willReadFrequently:true});
-  ctx.drawImage(v,0,0,size,size);
-  const image=ctx.getImageData(0,0,size,size);
-  const d=image.data;
+function canvasFrame(){
+  const video=$("camera"),c=document.createElement("canvas"),s=240;c.width=c.height=s;
+  const x=c.getContext("2d",{willReadFrequently:true});x.drawImage(video,0,0,s,s);
+  const p=x.getImageData(0,0,s,s).data;
+  const regions={forehead:[75,42,90,42],left:[45,94,65,62],right:[130,94,65,62],nose:[95,88,50,70]};
+  function stats([rx,ry,rw,rh]){
+    let R=0,G=0,B=0,N=0,gloss=0;
+    for(let y=ry;y<ry+rh;y+=2)for(let z=rx;z<rx+rw;z+=2){const i=(y*s+z)*4,r=p[i],g=p[i+1],b=p[i+2],br=(r+g+b)/3;R+=r;G+=g;B+=b;gloss+=br>205&&Math.max(r,g,b)-Math.min(r,g,b)<35?1:0;N++}
+    return {r:R/N,g:G/N,b:B/N,gloss:gloss/N*100,brightness:(R+G+B)/(3*N)}
+  }
+  const f=stats(regions.forehead),l=stats(regions.left),r=stats(regions.right),n=stats(regions.nose);
+  return {forehead:f,left:l,right:r,nose:n,brightness:mean([f.brightness,l.brightness,r.brightness]),redness:mean([f.r-f.g,l.r-l.g,r.r-r.g]),colorAsymmetry:Math.abs((l.r-l.g)-(r.r-r.g)),sweat:mean([f.gloss,n.gloss])};
+}
 
-  const region=(x1,y1,x2,y2)=>{
-    let r=0,g=0,b=0,brightness=0,count=0,specular=0,saturation=0;
-    const sx=Math.max(0,Math.floor(x1*size)),ex=Math.min(size,Math.ceil(x2*size));
-    const sy=Math.max(0,Math.floor(y1*size)),ey=Math.min(size,Math.ceil(y2*size));
-    for(let y=sy;y<ey;y+=2){
-      for(let x=sx;x<ex;x+=2){
-        const i=(y*size+x)*4,rv=d[i],gv=d[i+1],bv=d[i+2];
-        const max=Math.max(rv,gv,bv),min=Math.min(rv,gv,bv);
-        const br=(rv+gv+bv)/3;
-        r+=rv;g+=gv;b+=bv;brightness+=br;
-        saturation+=max===0?0:(max-min)/max;
-        // 強い白色反射を光沢候補として集計
-        if(br>205 && (max-min)<28)specular++;
-        count++;
-      }
-    }
-    count=Math.max(1,count);
-    const ar=r/count,ag=g/count,ab=b/count;
-    return {
-      red:ar,green:ag,blue:ab,
-      brightness:brightness/count,
-      redness:ar-(ag+ab)/2,
-      saturation:saturation/count*100,
-      specularRatio:specular/count*100
-    };
-  };
+function baseline(workerId,currentId=null){
+  const db=loadDB(),max=db.settings.baselineCount,min=db.settings.baselineMin;
+  const rows=db.records.filter(r=>r.workerId===workerId&&r.id!==currentId&&r.level==="green"&&r.condition==="good"&&r.quality>=65).slice(0,max);
+  if(rows.length<min)return {ready:false,count:rows.length,min};
+  const fields=["colorRisk","sweatRisk","expressionRisk","eyeRisk","openness","blinkRate","maxClosureMs","headMotion"];
+  const values={};fields.forEach(k=>values[k]=mean(rows.map(r=>Number(r.ai?.[k])||0)));
+  return {ready:true,count:rows.length,values};
+}
+function deviation(current,base,key,direction="high",scale=1){
+  if(!base.ready)return 0;
+  const b=base.values[key],c=Number(current[key])||0;
+  const d=direction==="low"?b-c:c-b;
+  return clamp(d*scale);
+}
+function calculateConditionAI(ai,self,base){
+  const baseColor=deviation(ai,base,"colorRisk","high",2.2);
+  const baseExpression=deviation(ai,base,"expressionRisk","high",1.7);
+  const baseEye=deviation(ai,base,"eyeRisk","high",1.8);
+  const baseOpen=deviation(ai,base,"openness","low",2.5);
+  const baseBlink=Math.min(100,Math.abs((ai.blinkRate||0)-(base.ready?base.values.blinkRate:ai.blinkRate||0))*2.2);
+  const baseMotion=deviation(ai,base,"headMotion","high",8);
 
-  // 顔ガイド内を想定した固定領域。第2段階でFace Landmarkerの座標へ置換予定。
-  const forehead=region(.38,.20,.62,.36);
-  const leftCheek=region(.27,.42,.44,.62);
-  const rightCheek=region(.56,.42,.73,.62);
-  const nose=region(.44,.36,.56,.58);
-  const mouth=region(.39,.62,.61,.76);
-  const face=region(.25,.18,.75,.82);
+  let fatigue=ai.eyeRisk*.34+ai.expressionRisk*.22+ai.colorRisk*.16+baseOpen*.12+baseMotion*.10+ai.sweatRisk*.06;
+  let sleepRisk=ai.eyeRisk*.42+baseOpen*.22+baseBlink*.14+ai.expressionRisk*.12+ai.colorRisk*.10;
+  let condition=ai.colorRisk*.30+ai.sweatRisk*.18+ai.expressionRisk*.18+ai.eyeRisk*.16+baseColor*.12+baseExpression*.06;
+  let focus=ai.eyeRisk*.36+baseOpen*.22+baseMotion*.22+ai.expressionRisk*.12+baseBlink*.08;
 
-  const asymmetry=Math.abs(leftCheek.brightness-rightCheek.brightness)/
-    Math.max(1,(leftCheek.brightness+rightCheek.brightness)/2)*100;
-  const cheekRedness=(leftCheek.redness+rightCheek.redness)/2;
-  const pallor=Math.max(0,100-(leftCheek.saturation+rightCheek.saturation)/2);
-  const sweatIndex=Math.min(100,
-    forehead.specularRatio*5.2+nose.specularRatio*3.8+
-    Math.max(0,forehead.brightness-face.brightness)*0.35
-  );
+  if(self.sleep==="short"){fatigue+=12;sleepRisk+=25;focus+=10}
+  if(self.sleep==="poor"){fatigue+=22;sleepRisk+=45;focus+=18}
+  if(self.condition==="slight"){condition+=25;fatigue+=10}
+  if(self.condition==="bad"){condition+=60;fatigue+=20}
+  if(self.hydration==="partial"){condition+=10;fatigue+=6}
+  if(self.hydration==="none"){condition+=25;fatigue+=12;focus+=8}
 
   return {
-    brightness:face.brightness,
-    red:face.red,green:face.green,blue:face.blue,
-    asymmetry,
-    foreheadRedness:forehead.redness,
-    leftCheekRedness:leftCheek.redness,
-    rightCheekRedness:rightCheek.redness,
-    cheekRedness,
-    mouthRedness:mouth.redness,
-    pallor,
-    foreheadGloss:forehead.specularRatio,
-    noseGloss:nose.specularRatio,
-    sweatIndex
+    fatigueRisk:Math.round(clamp(fatigue)),sleepRisk:Math.round(clamp(sleepRisk)),
+    conditionRisk:Math.round(clamp(condition)),focusRisk:Math.round(clamp(focus)),
+    deviations:{baseColor:Math.round(baseColor),baseExpression:Math.round(baseExpression),baseEye:Math.round(baseEye),baseOpen:Math.round(baseOpen),baseBlink:Math.round(baseBlink),baseMotion:Math.round(baseMotion)}
   };
 }
-function startGuideMonitor(){
-  if(guideTimer)clearInterval(guideTimer);
-  guideTimer=setInterval(()=>{
-    if(!stream || measuring || $("camera").readyState<2)return;
-    try{
-      const s=sampleFrame();
-      const guide=$("faceGuide");
-      if(s.brightness<55){
-        guide.classList.remove("guide-ok");
-        guide.classList.add("guide-warn");
-        $("cameraMessage").textContent="少し暗いです。明るい場所へ移動してください。";
-      }else if(s.brightness>220){
-        guide.classList.remove("guide-ok");
-        guide.classList.add("guide-warn");
-        $("cameraMessage").textContent="光が強すぎます。逆光を避けてください。";
-      }else if(s.asymmetry>8){
-        guide.classList.remove("guide-ok");
-        guide.classList.add("guide-warn");
-        $("cameraMessage").textContent="顔を正面に向け、枠の中央に合わせてください。";
-      }else{
-        guide.classList.remove("guide-warn");
-        guide.classList.add("guide-ok");
-        $("cameraMessage").textContent="撮影できます。顔を動かさず撮影開始を押してください。";
-      }
-    }catch(e){
-      // 映像準備中は案内を変更しない
-    }
-  },700);
+function levelFrom(r,self,wbgt){
+  let level="green";
+  const up=x=>{const a=["green","yellow","orange","red"];if(a.indexOf(x)>a.indexOf(level))level=x};
+  if(self.condition==="bad")up("red");
+  if(wbgt>=31)up("orange");else if(wbgt>=28)up("yellow");
+  if(self.hydration==="none")up("orange");else if(self.hydration==="partial")up("yellow");
+  const max=Math.max(r.fatigueRisk,r.sleepRisk,r.conditionRisk,r.focusRisk);
+  if(max>=80)up("orange");else if(max>=55)up("yellow");
+  if(r.conditionRisk>=90)up("red");
+  return level;
+}
+function comments(ai,cai,base){
+  const c=[];
+  if(base.ready){
+    if(cai.deviations.baseOpen>=20)c.push("本人通常時より開眼状態が低下しています。");
+    if(cai.deviations.baseBlink>=20)c.push("本人通常時と比べて瞬き傾向に変化があります。");
+    if(cai.deviations.baseColor>=20)c.push("本人通常時より顔色特徴に変化があります。");
+    if(cai.deviations.baseExpression>=20)c.push("本人通常時より表情係数に変化があります。");
+  }else c.push(`本人通常値は未成立です（正常記録 ${base.count}/${base.min}件）。`);
+  if(ai.maxClosureMs>800)c.push("長めの閉眼が検出されました。");
+  if(cai.sleepRisk>=55)c.push("寝不足を断定せず、睡眠不足を含む目の状態変化として確認してください。");
+  if(cai.fatigueRisk>=55)c.push("疲労傾向が高いため、休憩後の再測定を推奨します。");
+  if(cai.conditionRisk>=55)c.push("体調変化の可能性があるため、管理者による対面確認が必要です。");
+  if(cai.focusRisk>=55)c.push("集中力低下につながる状態変化が疑われます。危険作業前は特に確認してください。");
+  if(!c.length)c.push("大きな変化は検出されませんでした。通常どおり本人の状態を確認してください。");
+  return c;
 }
 
-function evaluate(worker,frames){
-  const db=loadDB(),avg=k=>frames.reduce((s,x)=>s+x[k],0)/frames.length;
-  const brightness=avg("brightness"),asymmetry=avg("asymmetry");
-  const variation=Math.sqrt(frames.reduce((s,x)=>s+(x.brightness-brightness)**2,0)/frames.length);
-  const redness=avg("red")-(avg("green")+avg("blue"))/2;
-  const foreheadRedness=avg("foreheadRedness");
-  const leftCheekRedness=avg("leftCheekRedness");
-  const rightCheekRedness=avg("rightCheekRedness");
-  const mouthRedness=avg("mouthRedness");
-  const pallor=avg("pallor");
-  const foreheadGloss=avg("foreheadGloss");
-  const noseGloss=avg("noseGloss");
-  const sweatIndex=avg("sweatIndex");
-  const expressionFrames=frames.filter(x=>x.expressionAvailable);
-  const expressionAvg=k=>expressionFrames.length
-    ? expressionFrames.reduce((s,x)=>s+(Number(x[k])||0),0)/expressionFrames.length
-    : 0;
-  const expressionRisk=Math.round(expressionAvg("expressionRisk"));
-  const expressionConfidence=Math.round(expressionAvg("expressionConfidence"));
-  const browTension=expressionAvg("browTension");
-  const eyeTension=expressionAvg("eyeTension");
-  const mouthCornerDown=expressionAvg("mouthCornerDown");
-  const jawActivity=expressionAvg("jawActivity");
-  const expressionAvailable=expressionFrames.length>=Math.max(2,Math.floor(frames.length*0.35));
-  const eyeFrames=frames.filter(x=>x.eyeAvailable);
-  const lastEye=eyeFrames.at(-1)||{};
-  const eyeAvailable=eyeFrames.length>=Math.max(2,Math.floor(frames.length*0.35));
-  const eyeRisk=eyeAvailable?Math.round(Number(lastEye.eyeRisk)||0):0;
-  const eyeOpenness=eyeAvailable?Number(lastEye.eyeOpenness)||0:0;
-  const eyeAsymmetry=eyeAvailable?Number(lastEye.eyeAsymmetry)||0:0;
-  const blinkCount=eyeAvailable?Number(lastEye.blinkCount)||0:0;
-  const blinkRate=eyeAvailable?Number(lastEye.blinkRate)||0:0;
-  const maxClosureMs=eyeAvailable?Number(lastEye.maxClosureMs)||0:0;
-  const prolongedClosureCount=eyeAvailable?Number(lastEye.prolongedClosureCount)||0:0;
-  const closedRatio=eyeAvailable?Number(lastEye.closedRatio)||0:0;
-  const colorVariation=Math.sqrt(frames.reduce((s,x)=>s+(x.cheekRedness-avg("cheekRedness"))**2,0)/frames.length);
-
-  // 第1段階：顔色・発汗の観察スコア（医療診断ではない）
-  const rednessRisk=Math.min(100,Math.max(0,(Math.abs((leftCheekRedness+rightCheekRedness)/2)-10)*3.2));
-  const pallorRisk=Math.min(100,Math.max(0,(pallor-48)*2.6));
-  const colorAsymmetryRisk=Math.min(100,asymmetry*7);
-  const faceColorRisk=Math.round(
-    rednessRisk*0.45+pallorRisk*0.30+colorAsymmetryRisk*0.15+
-    Math.min(100,colorVariation*6)*0.10
-  );
-  const sweatRisk=Math.round(Math.min(100,Math.max(0,sweatIndex)));
-  const faceAiRisk=Math.round(
-    faceColorRisk*0.45+
-    sweatRisk*0.12+
-    (expressionAvailable?expressionRisk:faceColorRisk)*0.23+
-    (eyeAvailable?eyeRisk:faceColorRisk)*0.20
-  );
-  const wbgt=Number($("measureWbgt").value)||null,abnormal=$("conditionAbnormal").value==="yes",hydration=$("hydration").value;
-  let level="green",reasons=[],actions=[];
-  const raise=x=>{if(LEVELS[x].rank>LEVELS[level].rank)level=x;};
-  if(abnormal){raise("red");reasons.push("本人から体調異常の申告あり");}
-  if(wbgt!==null&&wbgt>=db.settings.wbgtOrange){raise("orange");reasons.push(`WBGT ${wbgt}℃で警戒基準以上`);}
-  else if(wbgt!==null&&wbgt>=db.settings.wbgtYellow){raise("yellow");reasons.push(`WBGT ${wbgt}℃で注意基準以上`);}
-  if(hydration==="none"){raise("orange");reasons.push("水分補給ができていない");}
-  else if(hydration==="partial"){raise("yellow");reasons.push("水分補給が少なめ");}
-  if(brightness<45||brightness>220){raise("yellow");reasons.push("撮影環境の明るさが不適切");}
-  if(asymmetry>7){raise("yellow");reasons.push("顔の左右差が大きく再測定推奨");}
-  if(variation>18){raise("yellow");reasons.push("測定中の動きが大きい");}
-  if(faceColorRisk>=72){
-    raise("yellow");
-    reasons.push("顔色の複数指標に大きな変化傾向");
-  }else if(faceColorRisk>=48){
-    reasons.push("顔色に軽度の変化傾向");
-  }
-  if(sweatRisk>=75)reasons.push("額・鼻周辺の光沢が増加傾向");
-  if(expressionAvailable && expressionRisk>=70){
-    reasons.push("眉・目・口元に大きな表情変化傾向");
-    if(faceColorRisk>=55 || sweatRisk>=65)raise("yellow");
-  }else if(expressionAvailable && expressionRisk>=45){
-    reasons.push("表情に軽度の変化傾向");
-  }else if(!expressionAvailable){
-    reasons.push("表情AIは未取得または顔検出不足");
-  }
-  if(eyeAvailable && eyeRisk>=70){
-    reasons.push("開眼率低下または長めの閉眼を検出");
-    if(expressionRisk>=55 || faceColorRisk>=55)raise("yellow");
-  }else if(eyeAvailable && eyeRisk>=45){
-    reasons.push("目の状態に軽度の変化傾向");
-  }else if(!eyeAvailable){
-    reasons.push("目の状態解析は未取得または顔検出不足");
-  }
-  if(!reasons.length)reasons.push("重大な変化は検出されませんでした");
-  actions=level==="red"?["直ちに作業を中止する","涼しい場所で管理者が本人を確認する","必要に応じて救急要請・医療機関へ連絡する"]:
-    level==="orange"?["作業を中断して休憩する","水分・塩分を補給する","管理者が本人を確認し再測定する"]:
-    level==="yellow"?["短時間休憩し水分補給する","撮影条件を整えて再測定する","違和感があれば作業を中止する"]:
-    ["通常どおりでも定期的に休憩する","水分補給を継続する","本人の異常時は結果に関係なく中止する"];
-  const faceColor=Math.abs(redness)>25?"大":Math.abs(redness)>14?"中":"小";
-  const symmetry=asymmetry>7?"大":asymmetry>4?"中":"小";
-  const movement=variation>18?"大":variation>10?"中":"小";
-  const lighting=(brightness>=65&&brightness<=200)?"適正":(brightness>=45&&brightness<=220)?"注意":"不適正";
-  let qualityScore=100;
-  if(lighting==="注意")qualityScore-=20;
-  if(lighting==="不適正")qualityScore-=45;
-  if(symmetry==="大")qualityScore-=20;
-  if(movement==="大")qualityScore-=25;
-  const quality=qualityScore>=80?"高":qualityScore>=55?"中":"低";
-  const confidence=Math.max(20,Math.min(99,qualityScore));
-  return {
-    level,reasons,actions,
-    metrics:{brightness:+brightness.toFixed(1),asymmetry:+asymmetry.toFixed(2),motion:+variation.toFixed(2),redness:+redness.toFixed(1)},
-    indicators:{faceColor,symmetry,movement,lighting},
-    quality,confidence,wbgt,abnormal,hydration,
-    faceAI:{
-      stage:1,
-      overallRisk:faceAiRisk,
-      colorRisk:faceColorRisk,
-      sweatRisk,
-      expressionRisk:expressionAvailable?expressionRisk:null,
-      expressionAvailable,
-      expressionLabel:!expressionAvailable?"解析できません":
-        expressionRisk>=70?"大きな表情変化":
-        expressionRisk>=45?"軽度の表情変化":"通常範囲",
-      expressionConfidence:expressionAvailable?expressionConfidence:0,
-      eyeRisk:eyeAvailable?eyeRisk:null,
-      eyeAvailable,
-      eyeLabel:!eyeAvailable?"解析できません":
-        eyeRisk>=70?"閉眼・開眼状態に大きな変化":
-        eyeRisk>=45?"目の状態に軽度変化":"通常範囲",
-      eyeMetrics:{
-        openness:+eyeOpenness.toFixed(1),
-        asymmetry:+eyeAsymmetry.toFixed(1),
-        blinkCount:Math.round(blinkCount),
-        blinkRate:+blinkRate.toFixed(1),
-        maxClosureMs:Math.round(maxClosureMs),
-        prolongedClosureCount:Math.round(prolongedClosureCount),
-        closedRatio:+closedRatio.toFixed(1)
-      },
-      colorLabel:faceColorRisk>=72?"大きな変化":faceColorRisk>=48?"軽度変化":"通常範囲",
-      sweatLabel:sweatRisk>=75?"増加傾向":sweatRisk>=45?"やや増加":"判定上大きな変化なし",
-      confidence:Math.round(Math.max(20,Math.min(99,qualityScore*0.85+15))),
-      regions:{
-        foreheadRedness:+foreheadRedness.toFixed(1),
-        leftCheekRedness:+leftCheekRedness.toFixed(1),
-        rightCheekRedness:+rightCheekRedness.toFixed(1),
-        mouthRedness:+mouthRedness.toFixed(1),
-        pallor:+pallor.toFixed(1),
-        foreheadGloss:+foreheadGloss.toFixed(2),
-        noseGloss:+noseGloss.toFixed(2),
-        browTension:+browTension.toFixed(1),
-        eyeTension:+eyeTension.toFixed(1),
-        mouthCornerDown:+mouthCornerDown.toFixed(1),
-        jawActivity:+jawActivity.toFixed(1)
-      },
-      disclaimer:"顔色・皮膚光沢・表情係数・目の開閉傾向であり、熱中症・脱水・眠気・疲労・感情の医学的診断ではありません。"
-    }
-  };
-}
-async function startMeasure(){
+async function measure(){
   if(measuring)return;
   const db=loadDB(),worker=db.workers.find(w=>w.id===$("measureWorker").value);
   if(!worker)return alert("作業員を選択してください。");
   if(!stream)return alert("カメラを開始してください。");
-  measuring=true;$("startMeasure").disabled=true;$("faceGuide").classList.add("guide-measuring");
-  window.FaceExpressionAI?.resetEyeSession?.();
-  const frames=[],sec=Math.max(5,Math.min(30,db.settings.duration||10)),start=Date.now();
+  measuring=true;$("startMeasure").disabled=true;$("faceGuide").classList.add("measuring");window.FaceAI?.reset?.();
+  const frames=[],duration=Math.max(8,Math.min(30,db.settings.duration)),start=Date.now();
   try{
-    while(Date.now()-start<sec*1000){
-      const frame=sampleFrame();
-      if(window.FaceExpressionAI?.analyze){
-        const expression=await window.FaceExpressionAI.analyze($("camera"));
-        frame.expression=expression;
-        frame.expressionRisk=expression?.available ? Number(expression.expressionRisk)||0 : 0;
-        frame.expressionAvailable=!!expression?.available;
-        frame.expressionConfidence=Number(expression?.confidence)||0;
-        frame.browTension=Number(expression?.features?.browTension)||0;
-        frame.eyeTension=Number(expression?.features?.eyeTension)||0;
-        frame.mouthCornerDown=Number(expression?.features?.mouthCornerDown)||0;
-        frame.jawActivity=Number(expression?.features?.jawActivity)||0;
-        frame.eyeAvailable=!!expression?.eye?.available;
-        frame.eyeRisk=Number(expression?.eye?.eyeRisk)||0;
-        frame.eyeOpenness=Number(expression?.eye?.openness)||0;
-        frame.eyeAsymmetry=Number(expression?.eye?.asymmetry)||0;
-        frame.blinkCount=Number(expression?.eye?.blinkCount)||0;
-        frame.blinkRate=Number(expression?.eye?.blinkRate)||0;
-        frame.maxClosureMs=Number(expression?.eye?.maxClosureMs)||0;
-        frame.prolongedClosureCount=Number(expression?.eye?.prolongedClosureCount)||0;
-        frame.closedRatio=Number(expression?.eye?.closedRatio)||0;
-      }
-      frames.push(frame);
-      const left=Math.ceil(sec-(Date.now()-start)/1000);
-      $("cameraMessage").textContent=`測定中…残り約${Math.max(0,left)}秒`;
-      await new Promise(r=>setTimeout(r,400));
+    while(Date.now()-start<duration*1000){
+      const cv=canvasFrame(),mp=await window.FaceAI?.analyze?.($("camera"));
+      frames.push({...cv,mp});
+      $("cameraMessage").textContent=`測定中…残り${Math.max(0,Math.ceil(duration-(Date.now()-start)/1000))}秒`;
+      await new Promise(r=>setTimeout(r,250));
     }
-    const ev=evaluate(worker,frames);
-    const record={id:uid(),createdAt:new Date().toISOString(),workerId:worker.id,workerName:worker.name,site:worker.site||"",team:worker.team||"",...ev,validation:null};
-    const d=loadDB();d.records.unshift(record);saveDB(d);showResult(record);renderDashboard();renderValidation();renderWorkerCard();
+    const valid=frames.filter(x=>x.mp?.available);
+    const avg=k=>mean(valid.map(x=>Number(x.mp[k])||0));
+    const colorRaw=mean(frames.map(x=>Math.abs(x.redness)));
+    const asym=mean(frames.map(x=>x.colorAsymmetry));
+    const colorRisk=Math.round(clamp(colorRaw*2.0+asym*3.0));
+    const sweatRisk=Math.round(clamp(mean(frames.map(x=>x.sweat))*3.2));
+    const ai={
+      colorRisk,sweatRisk,expressionRisk:Math.round(avg("expressionRisk")),eyeRisk:Math.round(avg("eyeRisk")),
+      openness:+avg("openness").toFixed(1),blinkRate:+(valid.at(-1)?.mp.blinkRate||0).toFixed(1),
+      blinkCount:valid.at(-1)?.mp.blinkCount||0,maxClosureMs:valid.at(-1)?.mp.maxClosureMs||0,
+      prolongedClosureCount:valid.at(-1)?.mp.prolongedClosureCount||0,headMotion:+avg("headMotion").toFixed(2)
+    };
+    const self={condition:$("condition").value,sleep:$("sleep").value,hydration:$("hydration").value};
+    const b=baseline(worker.id),cai=calculateConditionAI(ai,self,b),wbgt=Number($("wbgt").value)||0;
+    const level=levelFrom(cai,self,wbgt),quality=Math.round(clamp(valid.length/frames.length*70+(mean(frames.map(x=>x.brightness))>55?30:10)));
+    const record={id:uid(),createdAt:new Date().toISOString(),workerId:worker.id,workerName:worker.name,site:worker.site||"",team:worker.team||"",wbgt:wbgt||null,...self,level,quality,ai,conditionAI:cai,baseline:{ready:b.ready,count:b.count},comments:comments(ai,cai,b)};
+    const next=loadDB();next.records.unshift(record);saveDB(next);show(record,b);render();
+    window.HeatCheckCloud?.saveRecord?.(record);
     $("cameraMessage").textContent="測定完了。";
-  }catch(e){$("cameraMessage").textContent="測定エラー："+(e.message||e);}
-  finally{measuring=false;$("faceGuide").classList.remove("guide-measuring");$("startMeasure").disabled=!stream;}
+  }catch(e){console.error(e);$("cameraMessage").textContent="測定エラー："+e.message}
+  finally{measuring=false;$("faceGuide").classList.remove("measuring");$("startMeasure").disabled=!stream}
 }
-$("startMeasure").onclick=startMeasure;
-function showResult(r){
-  const faceCondition =
-    r.abnormal ? "本人申告あり" :
-    r.indicators?.faceColor === "大" || r.indicators?.symmetry === "大" || r.indicators?.movement === "大" ? "要確認" :
-    r.level === "green" ? "良好" : "注意";
+$("startMeasure").onclick=measure;
 
-  const summaries = {
-    green: "現時点で大きな変化は確認されていません。",
-    yellow: "軽度の注意要因があります。休憩と再確認を行ってください。",
-    orange: "作業を中断し、管理者が本人の状態を確認してください。",
-    red: "直ちに作業を中止し、管理者が本人を確認してください。"
-  };
-
-  const iconMap = {green:"●", yellow:"▲", orange:"▲", red:"×"};
-
-  $("measureResult").classList.remove("hidden");
-  $("resultHero").className = "simple-result-hero " + r.level;
-  $("resultIcon").textContent = iconMap[r.level] || "●";
-  $("resultStatus").textContent = LEVELS[r.level].label;
-  $("resultSummary").textContent = summaries[r.level];
-  $("faceCondition").textContent = faceCondition;
-  $("resultQualityText").textContent = r.quality || "中";
-  $("resultConfidence").textContent = `${r.confidence ?? 70}%`;
-
-  const faceAI=r.faceAI||{};
-  if($("faceAiOverall")) $("faceAiOverall").textContent=`${Math.max(0,100-(faceAI.overallRisk??0))}点`;
-  if($("faceAiColor")) $("faceAiColor").textContent=`${Math.max(0,100-(faceAI.colorRisk??0))}点`;
-  if($("faceAiColorLabel")) $("faceAiColorLabel").textContent=faceAI.colorLabel||"未解析";
-  if($("faceAiSweat")) $("faceAiSweat").textContent=`${Math.max(0,100-(faceAI.sweatRisk??0))}点`;
-  if($("faceAiSweatLabel")) $("faceAiSweatLabel").textContent=faceAI.sweatLabel||"未解析";
-  if($("faceAiExpression")) $("faceAiExpression").textContent=
-    faceAI.expressionAvailable ? `${Math.max(0,100-(faceAI.expressionRisk??0))}点` : "再測定";
-  if($("faceAiExpressionLabel")) $("faceAiExpressionLabel").textContent=
-    faceAI.expressionLabel||"未解析";
-  if($("faceAiEye")) $("faceAiEye").textContent=
-    faceAI.eyeAvailable ? `${Math.max(0,100-(faceAI.eyeRisk??0))}点` : "再測定";
-  if($("faceAiEyeLabel")) $("faceAiEyeLabel").textContent=
-    faceAI.eyeLabel||"未解析";
-  if($("faceAiStageNote")) $("faceAiStageNote").textContent=
-    "第3段階では顔色・皮膚光沢・表情に加え、瞬き、開眼率、閉眼時間、左右差を時系列解析します。";
-
-  $("resultReasons").innerHTML = r.reasons.slice(0,5)
-    .map(reason => `<li><span class="check-mark">✓</span><span>${esc(reason)}</span></li>`)
-    .join("");
-
-  $("resultActions").innerHTML = r.actions.slice(0,4)
-    .map(action => `<li>${esc(action)}</li>`)
-    .join("");
-
-  const indicators = r.indicators || {};
-  const detailItems = [
-    ["顔色", indicators.faceColor ?? "—"],
-    ["左右差", indicators.symmetry ?? "—"],
-    ["動き", indicators.movement ?? "—"],
-    ["撮影環境", indicators.lighting ?? "—"],
-    ["WBGT", r.wbgt !== null ? `${r.wbgt}℃` : "未入力"],
-    ["自覚症状", r.abnormal ? "あり" : "なし"],
-    ["水分補給", r.hydration === "good" ? "できている" : r.hydration === "partial" ? "少なめ" : "できていない"],
-    ["明るさ数値", r.metrics?.brightness ?? "—"],
-    ["左右差数値", r.metrics?.asymmetry ?? "—"],
-    ["動き数値", r.metrics?.motion ?? "—"],
-    ["顔色差数値", r.metrics?.redness ?? "—"],
-    ["顔AI総合", r.faceAI ? `${Math.max(0,100-r.faceAI.overallRisk)}点` : "—"],
-    ["顔色スコア", r.faceAI ? `${Math.max(0,100-r.faceAI.colorRisk)}点` : "—"],
-    ["発汗傾向スコア", r.faceAI ? `${Math.max(0,100-r.faceAI.sweatRisk)}点` : "—"],
-    ["額の赤み指数", r.faceAI?.regions?.foreheadRedness ?? "—"],
-    ["左頬の赤み指数", r.faceAI?.regions?.leftCheekRedness ?? "—"],
-    ["右頬の赤み指数", r.faceAI?.regions?.rightCheekRedness ?? "—"],
-    ["額の光沢率", r.faceAI?.regions?.foreheadGloss ?? "—"],
-    ["鼻の光沢率", r.faceAI?.regions?.noseGloss ?? "—"],
-    ["表情スコア", r.faceAI?.expressionAvailable ? `${Math.max(0,100-(r.faceAI.expressionRisk??0))}点` : "未取得"],
-    ["表情AI信頼度", r.faceAI?.expressionAvailable ? `${r.faceAI.expressionConfidence??0}%` : "—"],
-    ["眉の緊張指数", r.faceAI?.regions?.browTension ?? "—"],
-    ["目周辺の緊張指数", r.faceAI?.regions?.eyeTension ?? "—"],
-    ["口角低下指数", r.faceAI?.regions?.mouthCornerDown ?? "—"],
-    ["顎活動指数", r.faceAI?.regions?.jawActivity ?? "—"],
-    ["目の状態スコア", r.faceAI?.eyeAvailable ? `${Math.max(0,100-(r.faceAI.eyeRisk??0))}点` : "未取得"],
-    ["平均開眼率", r.faceAI?.eyeMetrics?.openness ?? "—"],
-    ["瞬き回数", r.faceAI?.eyeMetrics?.blinkCount ?? "—"],
-    ["瞬き換算回数/分", r.faceAI?.eyeMetrics?.blinkRate ?? "—"],
-    ["最大閉眼時間", r.faceAI?.eyeMetrics?.maxClosureMs != null ? `${r.faceAI.eyeMetrics.maxClosureMs}ms` : "—"],
-    ["長時間閉眼回数", r.faceAI?.eyeMetrics?.prolongedClosureCount ?? "—"],
-    ["目の左右差", r.faceAI?.eyeMetrics?.asymmetry ?? "—"],
-    ["両眼閉眼比率", r.faceAI?.eyeMetrics?.closedRatio ?? "—"]
-  ];
-
-  $("resultMetrics").innerHTML = detailItems.map(([name,value]) => `
-    <div class="simple-detail-item">
-      <span>${esc(name)}</span><strong>${esc(value)}</strong>
-    </div>`).join("");
-
-  $("measureResult").scrollIntoView({behavior:"smooth", block:"start"});
+function show(r,b){
+  $("result").classList.remove("hidden");$("resultHero").className="hero "+r.level;$("resultLevel").textContent=LEVELS[r.level];
+  $("resultSummary").textContent=r.level==="green"?"現時点で大きな異常兆候は確認されていません。":r.level==="yellow"?"軽度の変化があります。休憩・再確認を行ってください。":r.level==="orange"?"作業を中断し、管理者が本人を確認してください。":"直ちに作業を中止し、本人の訴えを確認してください。";
+  const map={scoreColor:r.ai.colorRisk,scoreSweat:r.ai.sweatRisk,scoreExpression:r.ai.expressionRisk,scoreEye:r.ai.eyeRisk,scoreFatigue:r.conditionAI.fatigueRisk,scoreSleep:r.conditionAI.sleepRisk,scoreCondition:r.conditionAI.conditionRisk,scoreFocus:r.conditionAI.focusRisk};
+  Object.entries(map).forEach(([id,risk])=>$(id).textContent=`${riskToScore(risk)}点`);
+  $("baselineStatus").textContent=b.ready?`本人の直近正常記録${b.count}件と比較しています。`:`通常値の成立にはあと${Math.max(0,b.min-b.count)}件の正常記録が必要です。`;
+  $("baselineMetrics").innerHTML=Object.entries(r.conditionAI.deviations).map(([k,v])=>`<div><span>${({baseColor:"顔色差",baseExpression:"表情差",baseEye:"目状態差",baseOpen:"開眼低下",baseBlink:"瞬き変化",baseMotion:"頭部動揺"}[k])}</span><strong>${v}</strong></div>`).join("");
+  $("aiComment").innerHTML=r.comments.map(x=>`<p>・${esc(x)}</p>`).join("");
+  const actions=r.level==="green"?["水分補給と定期休憩を継続する","本人に違和感があれば結果に関係なく申告する"]:r.level==="yellow"?["短時間休憩後に再測定する","管理者が睡眠・体調・水分状況を確認する","高所・重機・電気等の危険作業前は慎重に判断する"]:r.level==="orange"?["作業を中断し涼しい場所で休憩する","管理者が対面で状態を確認する","改善しない場合は作業復帰させない"]:["直ちに作業を中止する","意識・応答・歩行状態を確認する","必要に応じて救急要請または医療機関へ連絡する"];
+  $("actions").innerHTML=actions.map(x=>`<li>${esc(x)}</li>`).join("");
+  const d={開眼率:r.ai.openness,瞬き回数:r.ai.blinkCount,"瞬き回数/分":r.ai.blinkRate,最大閉眼時間:r.ai.maxClosureMs+"ms",長時間閉眼:r.ai.prolongedClosureCount,頭部動揺:r.ai.headMotion,測定品質:r.quality+"%",WBGT:r.wbgt??"未入力",顔色リスク:r.ai.colorRisk,発汗傾向リスク:r.ai.sweatRisk,表情リスク:r.ai.expressionRisk,目リスク:r.ai.eyeRisk};
+  $("details").innerHTML=Object.entries(d).map(([k,v])=>`<div><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join("");
+  $("result").scrollIntoView({behavior:"smooth"});
 }
 
-function filteredValidation(){
-  const d=loadDB(),wid=$("validationWorker").value,mode=$("validationPending").value;
-  return d.records.filter(r=>(!wid||r.workerId===wid)&&(mode==="all"||(mode==="pending"?!r.validation:!!r.validation)));
+function render(){
+  workerOptions();
+  const db=loadDB();
+  $("duration").value=db.settings.duration;$("baselineCount").value=db.settings.baselineCount;$("baselineMin").value=db.settings.baselineMin;
+  $("workerList").innerHTML=db.workers.map(w=>`<div class="worker-row"><span><strong>${esc(w.name)}</strong><br>${esc(w.id)}／${esc(w.site||"—")}／${esc(w.team||"—")}</span><button data-del="${esc(w.id)}">削除</button></div>`).join("")||"登録なし";
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{if(confirm("削除しますか？")){const d=loadDB();d.workers=d.workers.filter(w=>w.id!==b.dataset.del);saveDB(d);render()}});
+  const wid=$("historyWorker").value,rows=db.records.filter(r=>!wid||r.workerId===wid);
+  $("historyList").innerHTML=rows.length?`<table><thead><tr><th>日時</th><th>作業員</th><th>判定</th><th>疲労</th><th>寝不足</th><th>体調変化</th><th>集中力</th></tr></thead><tbody>${rows.slice(0,100).map(r=>`<tr><td>${new Date(r.createdAt).toLocaleString("ja-JP")}</td><td>${esc(r.workerName)}</td><td>${LEVELS[r.level]}</td><td>${riskToScore(r.conditionAI?.fatigueRisk||0)}</td><td>${riskToScore(r.conditionAI?.sleepRisk||0)}</td><td>${riskToScore(r.conditionAI?.conditionRisk||0)}</td><td>${riskToScore(r.conditionAI?.focusRisk||0)}</td></tr>`).join("")}</tbody></table>`:"履歴なし";
 }
-function renderValidation(){
-  renderAllSelectors();const rows=filteredValidation();
-  $("validationList").innerHTML=rows.length?rows.map(r=>`<div class="record">
-    <div class="record-head"><strong>${esc(r.workerName)}（${esc(r.workerId)}）</strong><span>${fmtDate(r.createdAt)}／${LEVELS[r.level].label}</span></div>
-    <p>${esc(r.site||"現場未設定")}／WBGT ${r.wbgt??"未入力"}／${r.reasons.map(esc).join("、")}</p>
-    <label>管理者評価
-      <select data-val-result="${r.id}">
-        <option value="">未評価</option><option value="match" ${r.validation?.result==="match"?"selected":""}>AI判定と概ね一致</option>
-        <option value="over" ${r.validation?.result==="over"?"selected":""}>AI判定が厳しすぎる</option>
-        <option value="under" ${r.validation?.result==="under"?"selected":""}>AI判定が軽すぎる</option>
-      </select>
-    </label>
-    <label>所見<textarea data-val-comment="${r.id}">${esc(r.validation?.comment||"")}</textarea></label>
-    <button class="primary" data-save-validation="${r.id}">評価を保存</button>
-  </div>`).join(""):"対象記録はありません。";
-  document.querySelectorAll("[data-save-validation]").forEach(b=>b.onclick=()=>{const id=b.dataset.saveValidation,d=loadDB(),r=d.records.find(x=>x.id===id);if(!r)return;const result=document.querySelector(`[data-val-result="${id}"]`).value,comment=document.querySelector(`[data-val-comment="${id}"]`).value.trim();r.validation=result?{result,comment,updatedAt:new Date().toISOString()}:null;saveDB(d);renderValidation();renderDashboard();});
-}
-$("validationWorker").onchange=renderValidation;$("validationPending").onchange=renderValidation;
+$("historyWorker").onchange=render;
+$("saveSettings").onclick=()=>{const db=loadDB();db.settings.duration=clamp(Number($("duration").value)||10,8,30);db.settings.baselineCount=clamp(Number($("baselineCount").value)||10,3,30);db.settings.baselineMin=clamp(Number($("baselineMin").value)||5,3,10);saveDB(db);alert("保存しました。")};
+function download(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+$("exportJson").onclick=()=>download("heat-check-v12-stage4-backup.json",JSON.stringify(loadDB(),null,2),"application/json");
+$("importJson").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!Array.isArray(x.records)||!Array.isArray(x.workers))throw Error();saveDB({...defaults(),...x});render();alert("復元しました。")}catch{alert("復元できません。")}};rd.readAsText(f);e.target.value=""};
+$("clearRecords").onclick=()=>{if(confirm("測定履歴を全削除しますか？")){const db=loadDB();db.records=[];saveDB(db);render()}};
+$("exportCsv").onclick=()=>{const q=v=>`"${String(v??"").replace(/"/g,'""')}"`,db=loadDB(),head=["日時","作業員ID","氏名","現場","班","判定","WBGT","体調申告","睡眠申告","水分","顔色点","発汗点","表情点","目点","疲労点","寝不足点","体調変化点","集中力点","開眼率","瞬き/分","最大閉眼ms","通常値成立"];const rows=db.records.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level],r.wbgt,r.condition,r.sleep,r.hydration,riskToScore(r.ai.colorRisk),riskToScore(r.ai.sweatRisk),riskToScore(r.ai.expressionRisk),riskToScore(r.ai.eyeRisk),riskToScore(r.conditionAI.fatigueRisk),riskToScore(r.conditionAI.sleepRisk),riskToScore(r.conditionAI.conditionRisk),riskToScore(r.conditionAI.focusRisk),r.ai.openness,r.ai.blinkRate,r.ai.maxClosureMs,r.baseline?.ready?"済":"未"]);download("heat-check-v12-stage4.csv","\ufeff"+[head,...rows].map(a=>a.map(q).join(",")).join("\n"),"text/csv")};
 
-function renderBars(id,obj,total){
-  const rows=Object.entries(obj).sort((a,b)=>b[1]-a[1]);
-  $(id).innerHTML=rows.length?rows.map(([k,v])=>`<div class="bar-row"><span>${esc(k)}</span><div class="bar-track"><div class="bar-fill" style="width:${total?Math.round(v/total*100):0}%"></div></div><strong>${v}</strong></div>`).join(""):"データなし";
-}
-function renderDashboard(){
-  const r=loadDB().records,total=r.length,alert=r.filter(x=>LEVELS[x.level].rank>=1).length;
-  $("dashTotal").textContent=total;$("dashAlert").textContent=alert;$("dashSymptoms").textContent=r.filter(x=>x.abnormal).length;$("dashPending").textContent=r.filter(x=>!x.validation).length;
-  const levels={通常:0,注意:0,警戒:0,"中止・確認":0},sites={};
-  r.forEach(x=>{levels[LEVELS[x.level].label]++;sites[x.site||"現場未設定"]=(sites[x.site||"現場未設定"]||0)+1;});
-  renderBars("levelBreakdown",levels,total);renderBars("siteBreakdown",sites,total);
-  $("dashboardRecords").innerHTML=table(r.slice(0,50));
-}
-function table(rows){
-  if(!rows.length)return "記録はありません。";
-  return `<table><thead><tr><th>日時</th><th>作業員</th><th>現場</th><th>判定</th><th>WBGT</th><th>評価</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${fmtDate(r.createdAt)}</td><td>${esc(r.workerName)}（${esc(r.workerId)}）</td><td>${esc(r.site||"—")}</td><td>${LEVELS[r.level].label}</td><td>${r.wbgt??"—"}</td><td>${r.validation?"済":"未"}</td></tr>`).join("")}</tbody></table>`;
-}
-
-function renderWorkerCard(){
-  renderAllSelectors();const id=$("workerCardSelect").value,db=loadDB(),w=db.workers.find(x=>x.id===id);
-  if(!w){$("workerProfile").textContent="作業員を選択してください。";$("workerSummary").innerHTML="";$("workerRecords").innerHTML="";drawChart([]);return;}
-  $("workerProfile").textContent=`${w.name}（${w.id}）／${w.site||"現場未設定"}／${w.team||"班未設定"}`;
-  const period=$("workerCardPeriod").value,cut=period==="all"?0:Date.now()-Number(period)*86400000;
-  const rows=db.records.filter(r=>r.workerId===id&&(!cut||new Date(r.createdAt).getTime()>=cut)).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
-  const alerts=rows.filter(r=>LEVELS[r.level].rank>=1).length,avgW=rows.filter(r=>r.wbgt!==null).reduce((s,r)=>s+r.wbgt,0)/(rows.filter(r=>r.wbgt!==null).length||1);
-  $("workerSummary").innerHTML=`<div class="summary-card"><span>測定件数</span><strong>${rows.length}</strong></div><div class="summary-card"><span>注意以上</span><strong>${alerts}</strong></div><div class="summary-card"><span>平均WBGT</span><strong>${avgW?avgW.toFixed(1):"—"}</strong></div><div class="summary-card"><span>評価済み</span><strong>${rows.filter(r=>r.validation).length}</strong></div>`;
-  drawChart(rows);$("workerRecords").innerHTML=table([...rows].reverse());
-}
-$("workerCardSelect").onchange=renderWorkerCard;$("workerCardPeriod").onchange=renderWorkerCard;
-function drawChart(rows){
-  const c=$("workerChart"),ctx=c.getContext("2d"),w=c.width=c.clientWidth*devicePixelRatio,h=c.height=280*devicePixelRatio;ctx.scale(devicePixelRatio,devicePixelRatio);const W=c.clientWidth,H=280;ctx.clearRect(0,0,W,H);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);ctx.strokeStyle="#d8e4e4";for(let y=30;y<=230;y+=50){ctx.beginPath();ctx.moveTo(45,y);ctx.lineTo(W-15,y);ctx.stroke();}
-  if(!rows.length){ctx.fillStyle="#60777b";ctx.fillText("測定記録なし",55,60);return;}
-  const pts=rows.slice(-30),step=(W-70)/Math.max(1,pts.length-1);ctx.strokeStyle="#0f766e";ctx.lineWidth=3;ctx.beginPath();pts.forEach((r,i)=>{const x=45+i*step,y=230-LEVELS[r.level].rank*60;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();ctx.fillStyle="#17343a";["通常","注意","警戒","中止"].forEach((t,i)=>ctx.fillText(t,4,234-i*60));
-}
-
-$("saveSettings").onclick=()=>{const d=loadDB();d.settings.duration=Math.max(5,Math.min(30,Number($("settingDuration").value)||10));d.settings.wbgtYellow=Number($("settingWbgtYellow").value)||28;d.settings.wbgtOrange=Number($("settingWbgtOrange").value)||31;saveDB(d);setStatus("settingsStatus","設定を保存しました。","success");};
-$("exportJson").onclick=()=>download("heat-check-v11-backup.json",JSON.stringify(loadDB(),null,2),"application/json");
-$("exportCsv").onclick=()=>{const rows=loadDB().records,head=["日時","作業員ID","氏名","現場","作業班","判定","WBGT","体調異常","水分補給","明るさ","左右差","動き","顔色差","顔AI総合点","顔色点","発汗傾向点","表情点","表情AI信頼度","目の状態点","開眼率","瞬き回数","最大閉眼ms","長時間閉眼回数","実証評価","所見"];const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;const csv="\ufeff"+[head,...rows.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level].label,r.wbgt,r.abnormal?"あり":"なし",r.hydration,r.metrics.brightness,r.metrics.asymmetry,r.metrics.motion,r.metrics.redness,Math.max(0,100-(r.faceAI?.overallRisk??0)),Math.max(0,100-(r.faceAI?.colorRisk??0)),Math.max(0,100-(r.faceAI?.sweatRisk??0)),r.faceAI?.expressionAvailable?Math.max(0,100-(r.faceAI?.expressionRisk??0)):"",r.faceAI?.expressionConfidence??"",r.faceAI?.eyeAvailable?Math.max(0,100-(r.faceAI?.eyeRisk??0)):"",r.faceAI?.eyeMetrics?.openness??"",r.faceAI?.eyeMetrics?.blinkCount??"",r.faceAI?.eyeMetrics?.maxClosureMs??"",r.faceAI?.eyeMetrics?.prolongedClosureCount??"",r.validation?.result||"",r.validation?.comment||""])].map(a=>a.map(q).join(",")).join("\n");download("heat-check-v11-records.csv",csv,"text/csv");};
-$("importJson").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d.records)||!Array.isArray(d.workers))throw new Error();saveDB({...defaultDB(),...d});init();alert("復元しました。");}catch{alert("正しいバックアップファイルではありません。");}};rd.readAsText(f);e.target.value="";};
-$("clearRecords").onclick=()=>{if(!confirm("測定記録と実証評価をすべて削除しますか？"))return;const d=loadDB();d.records=[];saveDB(d);renderDashboard();renderValidation();renderWorkerCard();};
-
-function init(){
-  const d=loadDB();$("settingDuration").value=d.settings.duration;$("settingWbgtYellow").value=d.settings.wbgtYellow;$("settingWbgtOrange").value=d.settings.wbgtOrange;
-  renderAllSelectors();renderMaster();renderValidation();renderDashboard();renderWorkerCard();
-}
+window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"12.0-stage4"};
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
-window.HeatCheckApp={
-  switchView,
-  loadDB,
-  saveDB,
-  defaultDB,
-  refresh(){
-    init();
-    renderAdminDashboard?.();
-    renderMasterTransferStatus?.();
-  }
-};
-init();
-console.info("現場 AIコンディションチェック Ver.12.0 第3段階 顔色・発汗・表情・目解析 読込完了");
-
-
-/* =========================================================
-   Ver.11.2 第4.1 完全修正版
-   管理者ダッシュボードと現場運用マスタ共有を
-   単一DB（heatCheckV11）へ統合
-   ========================================================= */
-
-const MASTER_META_KEY = "heatCheckMasterMeta";
-
-function recordDate(record){
-  const date = new Date(record?.createdAt || 0);
-  return Number.isNaN(date.getTime()) ? new Date(0) : date;
-}
-function sameLocalDate(a,b){
-  return a.getFullYear()===b.getFullYear()
-    && a.getMonth()===b.getMonth()
-    && a.getDate()===b.getDate();
-}
-function formatAdminDate(date){
-  if(!(date instanceof Date) || Number.isNaN(date.getTime())) return "日時不明";
-  return new Intl.DateTimeFormat("ja-JP",{
-    month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"
-  }).format(date);
-}
-function levelLabel(level){
-  return LEVELS[level]?.label || "—";
-}
-function levelRank(level){
-  return LEVELS[level]?.rank ?? 0;
-}
-
-function renderAdminDashboard(){
-  const db = loadDB();
-  const records = [...db.records].sort((a,b)=>recordDate(b)-recordDate(a));
-  const today = new Date();
-  const todayRecords = records.filter(r=>sameLocalDate(recordDate(r),today));
-  const alertRecords = todayRecords.filter(r=>levelRank(r.level)>=1);
-  const confidences = todayRecords
-    .map(r=>Number(r.confidence))
-    .filter(Number.isFinite);
-  const average = confidences.length
-    ? Math.round(confidences.reduce((a,b)=>a+b,0)/confidences.length)
-    : null;
-
-  if(!$("adminTodayCount")) return;
-
-  $("adminTodayCount").textContent = todayRecords.length;
-  $("adminAlertCount").textContent = alertRecords.length;
-  $("adminWorkerCount").textContent = db.workers.length;
-  $("adminAverageConfidence").textContent = average ?? "—";
-
-  const counts = {green:0,yellow:0,orange:0,red:0};
-  todayRecords.forEach(r=>{
-    if(r.level in counts) counts[r.level]++;
-  });
-
-  $("adminLevelSummary").innerHTML = Object.entries(counts).map(([level,count])=>`
-    <div class="level-summary-row ${level}">
-      <span>${esc(levelLabel(level))}</span>
-      <strong>${count}件</strong>
-    </div>
-  `).join("");
-
-  const recentAlerts = records.filter(r=>levelRank(r.level)>=1).slice(0,8);
-  $("adminRecentAlerts").innerHTML = recentAlerts.length
-    ? recentAlerts.map(r=>`
-      <div class="recent-alert-item ${esc(r.level)}">
-        <div>
-          <strong>${esc(r.workerName || r.workerId || "未登録")}</strong>
-          <span>${esc(formatAdminDate(recordDate(r)))}</span>
-        </div>
-        <b>${esc(levelLabel(r.level))}</b>
-      </div>
-    `).join("")
-    : '<p class="empty-message">要確認結果はありません。</p>';
-
-  const select = $("adminWorkerSelect");
-  if(select){
-    const current = select.value;
-    select.innerHTML = '<option value="">作業員を選択</option>' +
-      db.workers.map(w=>`<option value="${esc(w.id)}">${esc(w.name||w.id)}（${esc(w.id)}）</option>`).join("");
-    if(db.workers.some(w=>w.id===current)) select.value=current;
-  }
-  renderAdminWorkerCard();
-  renderMasterTransferStatus();
-}
-
-function renderAdminWorkerCard(){
-  const card = $("adminWorkerCard");
-  const select = $("adminWorkerSelect");
-  if(!card || !select) return;
-
-  const id = select.value;
-  if(!id){
-    card.innerHTML='<p class="empty-message">作業員を選択してください。</p>';
-    return;
-  }
-
-  const db=loadDB();
-  const worker=db.workers.find(w=>w.id===id);
-  const records=db.records
-    .filter(r=>r.workerId===id)
-    .sort((a,b)=>recordDate(b)-recordDate(a));
-
-  const latest=records[0];
-  const alerts=records.filter(r=>levelRank(r.level)>=1).length;
-  const trend=records.slice(0,10).reverse();
-
-  card.innerHTML=`
-    <div class="worker-card-head">
-      <div>
-        <strong>${esc(worker?.name||id)}</strong>
-        <span>現場：${esc(worker?.site||"未設定")}／班：${esc(worker?.team||"未設定")}</span>
-      </div>
-      <b>${records.length}回測定</b>
-    </div>
-    <div class="worker-card-stats">
-      <div><span>最新判定</span><strong>${latest?esc(levelLabel(latest.level)):"—"}</strong></div>
-      <div><span>注意以上</span><strong>${alerts}回</strong></div>
-      <div><span>最新測定</span><strong>${latest?esc(formatAdminDate(recordDate(latest))):"—"}</strong></div>
-    </div>
-    <div class="worker-trend">
-      <span>直近10回</span>
-      <div>${trend.length
-        ? trend.map(r=>`<span class="worker-trend-dot ${esc(r.level)}" title="${esc(formatAdminDate(recordDate(r)))}：${esc(levelLabel(r.level))}"></span>`).join("")
-        : '<span class="empty-message">履歴なし</span>'}
-      </div>
-    </div>
-  `;
-}
-
-function getMasterMeta(){
-  try{
-    const value=JSON.parse(localStorage.getItem(MASTER_META_KEY)||"null");
-    if(value && typeof value==="object") return value;
-  }catch(_){}
-  return {masterVersion:"未設定",updatedAt:null,source:"端末保存"};
-}
-function saveMasterMeta(meta){
-  localStorage.setItem(MASTER_META_KEY,JSON.stringify(meta));
-}
-function createMasterVersion(){
-  const d=new Date(), p=v=>String(v).padStart(2,"0");
-  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-}
-function formatMasterDate(value){
-  if(!value) return "未設定";
-  const d=new Date(value);
-  return Number.isNaN(d.getTime()) ? "未設定" :
-    new Intl.DateTimeFormat("ja-JP",{
-      year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"
-    }).format(d);
-}
-function renderMasterTransferStatus(){
-  if(!$("masterVersionDisplay")) return;
-  const db=loadDB(), meta=getMasterMeta();
-  $("masterVersionDisplay").textContent=meta.masterVersion||"未設定";
-  $("masterUpdatedDisplay").textContent=formatMasterDate(meta.updatedAt);
-  $("masterSiteCount").textContent=db.sites.length;
-  $("masterWorkerCount").textContent=db.workers.length;
-
-  const badge=$("masterSyncStatus");
-  badge.textContent=meta.source||"端末保存";
-  badge.className="master-status-badge";
-  if(meta.source==="ファイル取込") badge.classList.add("imported");
-  if(meta.source==="PC作成") badge.classList.add("pc-created");
-}
-function showMasterMessage(type,message){
-  const box=$("masterImportPreview");
-  if(!box) return;
-  box.classList.remove("hidden","success","warning","error");
-  box.classList.add(type);
-  box.textContent=message;
-}
-function selectedMasterImportMode(){
-  return document.querySelector('input[name="masterImportMode"]:checked')?.value || "merge";
-}
-function cloneData(value){
-  return typeof structuredClone==="function"
-    ? structuredClone(value)
-    : JSON.parse(JSON.stringify(value));
-}
-function mergeSimpleValues(current,incoming){
-  return [...new Set([...current,...incoming].map(v=>String(v).trim()).filter(Boolean))];
-}
-function mergeWorkers(current,incoming){
-  const map=new Map(current.map(w=>[normalizeId(w.id),cloneData(w)]));
-  incoming.forEach(w=>{
-    const id=normalizeId(w.id);
-    if(!id) return;
-    map.set(id,{...(map.get(id)||{}),...cloneData(w),id});
-  });
-  return [...map.values()];
-}
-
-function exportOperationMaster(){
-  const db=loadDB();
-  const now=new Date().toISOString();
-  const version=createMasterVersion();
-
-  const payload={
-    schema:"heat-check-operation-master",
-    schemaVersion:2,
-    app:"現場 AIコンディションチェック",
-    appVersion:"11.2-stage4.1",
-    masterVersion:version,
-    updatedAt:now,
-    containsMeasurements:false,
-    containsImages:false,
-    master:{
-      sites:cloneData(db.sites),
-      teams:cloneData(db.teams),
-      workers:cloneData(db.workers),
-      settings:cloneData(db.settings)
-    }
-  };
-
-  saveMasterMeta({masterVersion:version,updatedAt:now,source:"PC作成"});
-  download(
-    `heat-check-master-${version}.json`,
-    JSON.stringify(payload,null,2),
-    "application/json"
-  );
-  renderMasterTransferStatus();
-  showMasterMessage(
-    "success",
-    `マスタを出力しました。現場${db.sites.length}件、班${db.teams.length}件、作業員${db.workers.length}件です。`
-  );
-}
-
-function validateMasterPayload(payload){
-  if(!payload || typeof payload!=="object") throw new Error("JSON形式が正しくありません。");
-  if(payload.schema!=="heat-check-operation-master") throw new Error("現場運用マスタ用ファイルではありません。");
-  if(!payload.master || typeof payload.master!=="object") throw new Error("マスタデータがありません。");
-
-  return {
-    sites:Array.isArray(payload.master.sites)?payload.master.sites:[],
-    teams:Array.isArray(payload.master.teams)?payload.master.teams:[],
-    workers:Array.isArray(payload.master.workers)?payload.master.workers:[],
-    settings:payload.master.settings && typeof payload.master.settings==="object"
-      ? payload.master.settings
-      : {}
-  };
-}
-
-async function importOperationMaster(event){
-  const file=event.target.files?.[0];
-  if(!file) return;
-
-  try{
-    const payload=JSON.parse(await file.text());
-    const master=validateMasterPayload(payload);
-    const mode=selectedMasterImportMode();
-
-    const message=[
-      mode==="replace"
-        ? "端末内の運用マスタをすべて置き換えます。"
-        : "既存マスタへ追加し、同一作業員IDは上書きします。",
-      "",
-      `現場：${master.sites.length}件`,
-      `班：${master.teams.length}件`,
-      `作業員：${master.workers.length}件`,
-      "",
-      "測定履歴は変更されません。",
-      "取り込みを実行しますか？"
-    ].join("\n");
-    if(!confirm(message)) return;
-
-    const db=loadDB();
-    if(mode==="replace"){
-      db.sites=cloneData(master.sites);
-      db.teams=cloneData(master.teams);
-      db.workers=cloneData(master.workers)
-        .map(w=>({...w,id:normalizeId(w.id)}))
-        .filter(w=>w.id);
-      db.settings={...defaultDB().settings,...cloneData(master.settings)};
-    }else{
-      db.sites=mergeSimpleValues(db.sites,master.sites);
-      db.teams=mergeSimpleValues(db.teams,master.teams);
-      db.workers=mergeWorkers(db.workers,master.workers);
-      db.settings={...db.settings,...cloneData(master.settings)};
-    }
-
-    saveDB(db);
-    const now=new Date().toISOString();
-    saveMasterMeta({
-      masterVersion:payload.masterVersion||createMasterVersion(),
-      updatedAt:payload.updatedAt||now,
-      importedAt:now,
-      source:"ファイル取込",
-      importMode:mode,
-      importedFilename:file.name
-    });
-
-    init();
-    renderAdminDashboard();
-    renderMasterTransferStatus();
-    showMasterMessage(
-      "success",
-      `マスタを取り込みました。${mode==="replace"?"全置換":"追加・同一ID上書き"}で反映し、測定履歴は保持しています。`
-    );
-    alert("現場運用マスタを反映しました。測定履歴は変更していません。");
-  }catch(error){
-    showMasterMessage("error",`取込エラー：${error.message}`);
-    alert(`マスタを取り込めませんでした：${error.message}`);
-  }finally{
-    event.target.value="";
-  }
-}
-
-function exportMeasurementsCsv41(){
-  $("exportCsv").click();
-}
-function exportBackupJson41(){
-  $("exportJson").click();
-}
-async function importBackupJson41(event){
-  const file=event.target.files?.[0];
-  if(!file) return;
-  const dataTransfer=new DataTransfer();
-  dataTransfer.items.add(file);
-  $("importJson").files=dataTransfer.files;
-  $("importJson").dispatchEvent(new Event("change"));
-  event.target.value="";
-}
-
-function bindStage41(){
-  $("refreshAdminSummary")?.addEventListener("click",renderAdminDashboard);
-  $("adminWorkerSelect")?.addEventListener("change",renderAdminWorkerCard);
-  $("exportMasterJson")?.addEventListener("click",exportOperationMaster);
-  $("importMasterJson")?.addEventListener("change",importOperationMaster);
-  $("exportMeasurementsCsv")?.addEventListener("click",exportMeasurementsCsv41);
-  $("exportBackupJson")?.addEventListener("click",exportBackupJson41);
-  $("importBackupJson")?.addEventListener("change",importBackupJson41);
-
-  renderAdminDashboard();
-  renderMasterTransferStatus();
-}
-
-if(document.readyState==="loading"){
-  document.addEventListener("DOMContentLoaded",bindStage41);
-}else{
-  bindStage41();
-}
-window.addEventListener("storage",()=>{
-  renderAdminDashboard();
-  renderMasterTransferStatus();
-});
+render();

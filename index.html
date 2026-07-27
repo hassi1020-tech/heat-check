@@ -4,71 +4,46 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
-  <title>現場 AIコンディションチェック Ver.12.0</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1200s3">
-  <link rel="stylesheet" href="styles.css?v=1200s3">
+  <title>現場 AIコンディションチェック Ver.12.0 第4段階</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1200s4">
+  <link rel="stylesheet" href="styles.css?v=1200s4">
 </head>
 <body>
-<header class="app-header">
+<header>
   <div>
     <h1>現場 AIコンディションチェック</h1>
-    <p>非接触スクリーニング／顔状態チェック</p>
+    <p>非接触スクリーニング／体調変化の補助検知</p>
   </div>
-  <div class="header-right">
-      <span class="version">Ver.12.0 第3段階 顔色・発汗・表情・目解析版</span>
-      <div class="device-mode-switch" aria-label="端末モード">
-        <button id="modeKioskButton" type="button">撮影端末</button>
-        <button id="modeAdminButton" type="button">管理PC</button>
-      </div>
-      <div class="cloud-auth">
-        <span id="cloudStatus" class="cloud-status offline">未接続</span>
-        <span id="cloudUser" class="cloud-user">未ログイン</span>
-        <button id="cloudLogin" type="button" class="cloud-login-button">Googleログイン</button>
-        <button id="cloudLogout" type="button" class="cloud-logout-button hidden">ログアウト</button>
-      </div>
-    </div>
+  <span class="version">Ver.12.0 第4段階</span>
 </header>
 
-<section id="kioskWelcome" class="kiosk-welcome hidden">
-  <div class="kiosk-welcome-inner">
-    <div>
-      <span class="kiosk-eyebrow">撮影端末モード</span>
-      <h2>作業員を選択して測定を開始してください</h2>
-      <p>顔写真・動画は保存しません。解析結果と測定記録のみクラウドへ保存します。</p>
-    </div>
-    <div class="kiosk-state-box">
-      <span>端末ID</span>
-      <strong id="kioskDeviceId">—</strong>
-    </div>
-  </div>
-</section>
-
-<nav class="tabs" aria-label="画面切替">
-  <button class="tab active" data-view="measure" data-role="measure-only">かんたん測定</button>
-  <button class="tab" data-view="validation" data-role="admin-only">実証評価記録</button>
-  <button class="tab" data-view="dashboard" data-role="admin-only">管理者ダッシュボード</button>
-  <button class="tab" data-view="worker">作業員別カルテ</button>
-  <button class="tab" data-view="master" data-role="admin-only">現場運用マスタ</button>
-  <button class="tab" data-view="settings" data-role="admin-only">設定・データ</button>
+<nav>
+  <button class="tab active" data-view="measure">測定</button>
+  <button class="tab" data-view="workers">作業員</button>
+  <button class="tab" data-view="history">履歴</button>
+  <button class="tab" data-view="settings">設定</button>
 </nav>
 
 <main>
 <section id="view-measure" class="view active">
-  <div class="grid two">
+  <div class="grid">
     <article class="card">
       <h2>1. 測定対象</h2>
-      <label>作業員ID
-        <select id="measureWorker"><option value="">作業員を選択</option></select>
-      </label>
-      <div id="measureWorkerInfo" class="info">作業員を選択してください。</div>
-      <label>体調異常
-        <select id="conditionAbnormal">
-          <option value="no">なし</option>
-          <option value="yes">あり</option>
+      <label>作業員<select id="measureWorker"><option value="">作業員を選択</option></select></label>
+      <div id="workerInfo" class="info">作業員を選択してください。</div>
+      <label>体調の自己申告
+        <select id="condition">
+          <option value="good">異常なし</option>
+          <option value="slight">少し気になる</option>
+          <option value="bad">体調不良</option>
         </select>
       </label>
-      <label>WBGT（管理者入力）
-        <input id="measureWbgt" type="number" step="0.1" min="0" max="50" placeholder="例：29.5">
+      <label>睡眠状態
+        <select id="sleep">
+          <option value="good">十分</option>
+          <option value="short">やや不足</option>
+          <option value="poor">寝不足</option>
+        </select>
       </label>
       <label>水分補給
         <select id="hydration">
@@ -77,387 +52,112 @@
           <option value="none">できていない</option>
         </select>
       </label>
+      <label>WBGT<input id="wbgt" type="number" min="0" max="50" step="0.1" placeholder="例 29.5"></label>
     </article>
 
-    <article class="card camera-card">
-      <h2>2. 顔状態チェック</h2>
+    <article class="card">
+      <h2>2. カメラ解析</h2>
       <div class="camera-wrap">
         <video id="camera" playsinline muted></video>
-        <canvas id="overlay"></canvas>
-        <div id="faceGuide" class="face-guide" aria-hidden="true">
-          <div class="face-oval">
-            <span class="eye-guide eye-left"></span>
-            <span class="eye-guide eye-right"></span>
-            <span class="nose-guide"></span>
-            <span class="chin-guide"></span>
-          </div>
-          <div class="guide-caption">顔全体を枠内に合わせ、正面を向いてください</div>
-        </div>
+        <div id="faceGuide" class="face-guide"></div>
         <div id="cameraMessage" class="camera-message">カメラを開始してください。</div>
       </div>
-      <div class="button-row">
+      <div class="buttons">
         <button id="startCamera" class="primary">カメラ開始</button>
-        <button id="startMeasure" class="accent" disabled>撮影開始</button>
-        <button id="stopCamera" disabled>カメラ停止</button>
+        <button id="startMeasure" class="accent" disabled>測定開始</button>
+        <button id="stopCamera" disabled>停止</button>
       </div>
-      <p class="note">顔画像・動画は保存しません。顔画像・動画は保存せず、色特徴・皮膚光沢・Face Landmarkerの表情係数のみ記録します。</p>
+      <p class="note">顔画像・動画は保存しません。端末内で数値化した特徴量だけを記録します。</p>
     </article>
   </div>
 
-  <article id="measureResult" class="simple-result hidden" aria-live="polite">
-    <header id="resultHero" class="simple-result-hero">
-      <p class="simple-result-label">判定結果</p>
-      <div class="simple-result-status-row">
-        <span id="resultIcon" class="simple-result-icon" aria-hidden="true">●</span>
-        <h2 id="resultStatus">—</h2>
-      </div>
-      <p id="resultSummary" class="simple-result-summary">測定結果を表示します。</p>
-    </header>
-
-    <div class="simple-result-body">
-      <section class="simple-result-section condition-section">
-        <h3>AIコンディション評価</h3>
-        <div class="condition-grid">
-          <div><span>顔状態</span><strong id="faceCondition">—</strong></div>
-          <div><span>測定品質</span><strong id="resultQualityText">—</strong></div>
-          <div><span>信頼度</span><strong id="resultConfidence">—</strong></div>
-        </div>
-      </section>
-
-      <section class="simple-result-section face-ai-section">
-        <div class="face-ai-heading">
-          <div>
-            <h3>AI顔解析（第3段階）</h3>
-            <p id="faceAiStageNote" class="face-ai-note"></p>
-          </div>
-          <div class="face-ai-overall">
-            <span>顔AI総合</span>
-            <strong id="faceAiOverall">—</strong>
-          </div>
-        </div>
-        <div class="face-ai-grid">
-          <article class="face-ai-card">
-            <span>① 顔色解析</span>
-            <strong id="faceAiColor">—</strong>
-            <small id="faceAiColorLabel">未解析</small>
-          </article>
-          <article class="face-ai-card">
-            <span>② 発汗状態解析</span>
-            <strong id="faceAiSweat">—</strong>
-            <small id="faceAiSweatLabel">未解析</small>
-          </article>
-          <article class="face-ai-card">
-            <span>③ 表情解析</span>
-            <strong id="faceAiExpression">—</strong>
-            <small id="faceAiExpressionLabel">未解析</small>
-          </article>
-          <article class="face-ai-card">
-            <span>④ 目の状態</span>
-            <strong id="faceAiEye">—</strong>
-            <small id="faceAiEyeLabel">未解析</small>
-          </article>
-          <article class="face-ai-card pending">
-            <span>⑤ 口元解析</span><strong>次段階</strong><small>未実装</small>
-          </article>
-        </div>
-      </section>
-
-      <section class="simple-result-section">
-        <h3>判定理由</h3>
-        <ul id="resultReasons" class="simple-check-list"></ul>
-      </section>
-
-      <section class="simple-result-section simple-action-section">
-        <h3>今やること</h3>
-        <ul id="resultActions" class="simple-action-list"></ul>
-      </section>
-
-      <details class="simple-details">
-        <summary>詳細を見る</summary>
-        <div id="resultMetrics" class="simple-detail-grid"></div>
-      </details>
-
-      <p class="simple-warning">
-        本アプリは医療診断を行いません。本人の訴えと管理者判断を最優先してください。
-      </p>
+  <article id="result" class="card hidden result">
+    <div id="resultHero" class="hero">
+      <span>総合判定</span><strong id="resultLevel">—</strong>
+      <p id="resultSummary"></p>
     </div>
+
+    <h3>AIコンディション評価</h3>
+    <div class="score-grid">
+      <div><span>顔色</span><strong id="scoreColor">—</strong></div>
+      <div><span>発汗傾向</span><strong id="scoreSweat">—</strong></div>
+      <div><span>表情</span><strong id="scoreExpression">—</strong></div>
+      <div><span>目の状態</span><strong id="scoreEye">—</strong></div>
+      <div class="condition-ai"><span>疲労傾向</span><strong id="scoreFatigue">—</strong></div>
+      <div class="condition-ai"><span>寝不足傾向</span><strong id="scoreSleep">—</strong></div>
+      <div class="condition-ai"><span>体調変化</span><strong id="scoreCondition">—</strong></div>
+      <div class="condition-ai"><span>集中力低下</span><strong id="scoreFocus">—</strong></div>
+    </div>
+
+    <section class="baseline-box">
+      <h3>本人通常値との比較</h3>
+      <p id="baselineStatus">比較データを確認中です。</p>
+      <div id="baselineMetrics" class="baseline-grid"></div>
+    </section>
+
+    <section>
+      <h3>AIコメント</h3>
+      <div id="aiComment" class="ai-comment"></div>
+    </section>
+
+    <section>
+      <h3>今やること</h3>
+      <ul id="actions"></ul>
+    </section>
+
+    <details>
+      <summary>解析詳細</summary>
+      <div id="details" class="detail-grid"></div>
+    </details>
+
+    <p class="warning">本機能は、熱中症・疲労・寝不足・病気・意識状態を診断するものではありません。本人の訴えと管理者判断を優先してください。</p>
   </article>
 </section>
 
-
-<section id="view-validation" class="view">
+<section id="view-workers" class="view">
   <article class="card">
-    <h2>実証評価記録</h2>
-    <p class="note">測定結果に対する管理者の所見を追記します。記録は測定データと同じIDで保存されます。</p>
-    <div class="filters">
-      <select id="validationWorker"><option value="">すべての作業員</option></select>
-      <select id="validationPending">
-        <option value="all">すべて</option>
-        <option value="pending">未評価のみ</option>
-        <option value="done">評価済みのみ</option>
-      </select>
+    <h2>作業員登録</h2>
+    <div class="form-grid">
+      <label>作業員ID<input id="workerId"></label>
+      <label>氏名<input id="workerName"></label>
+      <label>現場<input id="workerSite"></label>
+      <label>班<input id="workerTeam"></label>
     </div>
-    <div id="validationList" class="record-list"></div>
+    <button id="saveWorker" class="primary">登録・更新</button>
+    <div id="workerList"></div>
   </article>
 </section>
 
-<section id="view-dashboard" class="view">
-  <div class="admin-summary-view">
-<div class="section-head">
-    <div>
-      <p class="eyebrow">ADMIN SUMMARY</p>
-      <h2>管理者ダッシュボード</h2>
-      <p class="section-description">測定結果を現場・作業員・判定別に確認します。</p>
-    </div>
-    <button id="refreshAdminSummary" type="button" class="secondary-button">集計を更新</button>
-  </div>
-
-  <div class="admin-kpi-grid">
-    <article class="admin-kpi-card">
-      <span>本日の測定</span>
-      <strong id="adminTodayCount">0</strong>
-      <small>件</small>
-    </article>
-    <article class="admin-kpi-card">
-      <span>注意以上</span>
-      <strong id="adminAlertCount">0</strong>
-      <small>件</small>
-    </article>
-    <article class="admin-kpi-card">
-      <span>登録作業員</span>
-      <strong id="adminWorkerCount">0</strong>
-      <small>名</small>
-    </article>
-    <article class="admin-kpi-card">
-      <span>平均信頼度</span>
-      <strong id="adminAverageConfidence">—</strong>
-      <small>%</small>
-    </article>
-  </div>
-
-  <div class="admin-panel-grid">
-    <article class="admin-panel">
-      <h3>判定別集計</h3>
-      <div id="adminLevelSummary" class="level-summary-list"></div>
-    </article>
-
-    <article class="admin-panel">
-      <h3>直近の要確認結果</h3>
-      <div id="adminRecentAlerts" class="recent-alert-list"></div>
-    </article>
-  </div>
-
-  <div class="admin-panel-grid">
-    <article class="admin-panel">
-      <h3>作業員別カルテ</h3>
-      <label class="field">
-        <span>作業員</span>
-        <select id="adminWorkerSelect"></select>
-      </label>
-      <div id="adminWorkerCard" class="worker-chart-card">
-        <p class="empty-message">作業員を選択してください。</p>
-      </div>
-    </article>
-
-    <article class="admin-panel master-transfer-panel">
-      <div class="master-panel-head">
-        <div>
-          <h3>現場運用マスタ共有</h3>
-          <p class="small-note">PCで作成したマスタをスマホへ反映します。</p>
-        </div>
-        <span id="masterSyncStatus" class="master-status-badge">端末保存</span>
-      </div>
-
-      <div class="master-info-grid">
-        <div>
-          <span>マスタ版番号</span>
-          <strong id="masterVersionDisplay">—</strong>
-        </div>
-        <div>
-          <span>最終更新</span>
-          <strong id="masterUpdatedDisplay">—</strong>
-        </div>
-        <div>
-          <span>現場数</span>
-          <strong id="masterSiteCount">0</strong>
-        </div>
-        <div>
-          <span>作業員数</span>
-          <strong id="masterWorkerCount">0</strong>
-        </div>
-      </div>
-
-      <div class="master-transfer-actions">
-        <button id="exportMasterJson" type="button" class="primary-button">
-          マスタのみ出力
-        </button>
-
-        <label class="file-button">
-          マスタのみ取込
-          <input id="importMasterJson" type="file" accept=".json,application/json">
-        </label>
-      </div>
-
-      <fieldset class="master-import-mode">
-        <legend>取込方法</legend>
-        <label>
-          <input type="radio" name="masterImportMode" value="merge" checked>
-          既存マスタへ追加・同一IDは上書き
-        </label>
-        <label>
-          <input type="radio" name="masterImportMode" value="replace">
-          端末内のマスタをすべて置き換え
-        </label>
-      </fieldset>
-
-      <div id="masterImportPreview" class="master-import-preview hidden"></div>
-
-      <p class="master-caution">
-        測定履歴・カルテ・顔解析数値は変更しません。画像や動画はマスタファイルに含まれません。
-      </p>
-    </article>
-
-    <article class="admin-panel">
-      <h3>データ管理</h3>
-      <div class="admin-data-buttons">
-        <button id="exportMeasurementsCsv" type="button" class="primary-button">測定履歴CSV</button>
-        <button id="exportBackupJson" type="button" class="secondary-button">JSONバックアップ</button>
-        <label class="file-button">
-          JSON復元
-          <input id="importBackupJson" type="file" accept=".json,application/json">
-        </label>
-      </div>
-      <p class="small-note">画像・動画は出力されません。数値、判定、入力情報のみを扱います。</p>
-    </article>
-  </div>
-  </div>
-
-
-  <div class="summary-grid">
-    <div class="summary-card"><span>測定件数</span><strong id="dashTotal">0</strong></div>
-    <div class="summary-card"><span>注意以上</span><strong id="dashAlert">0</strong></div>
-    <div class="summary-card"><span>体調異常申告</span><strong id="dashSymptoms">0</strong></div>
-    <div class="summary-card"><span>未評価</span><strong id="dashPending">0</strong></div>
-  </div>
-  <div class="grid two">
-    <article class="card">
-      <h2>判定内訳</h2>
-      <div id="levelBreakdown" class="bar-list"></div>
-    </article>
-    <article class="card">
-      <h2>現場別状況</h2>
-      <div id="siteBreakdown" class="bar-list"></div>
-    </article>
-  </div>
+<section id="view-history" class="view">
   <article class="card">
-    <h2>最新記録</h2>
-    <div id="dashboardRecords" class="table-wrap"></div>
-  </article>
-</section>
-
-<section id="view-worker" class="view">
-  <article class="card">
-    <h2>作業員別カルテ</h2>
-    <div class="filters">
-      <select id="workerCardSelect"><option value="">作業員を選択</option></select>
-      <select id="workerCardPeriod">
-        <option value="30">直近30日</option>
-        <option value="90">直近90日</option>
-        <option value="365">直近1年</option>
-        <option value="all">全期間</option>
-      </select>
+    <div class="row-between">
+      <h2>測定履歴</h2>
+      <button id="exportCsv">CSV出力</button>
     </div>
-    <div id="workerProfile" class="info">作業員を選択してください。</div>
-    <div id="workerSummary" class="summary-grid"></div>
-    <canvas id="workerChart" width="900" height="280"></canvas>
-    <div id="workerRecords" class="table-wrap"></div>
+    <label>作業員<select id="historyWorker"><option value="">全員</option></select></label>
+    <div id="historyList"></div>
   </article>
-</section>
-
-<section id="view-master" class="view">
-  <div class="grid three">
-    <article class="card">
-      <h2>現場マスタ</h2>
-      <div class="inline">
-        <input id="siteName" placeholder="現場名">
-        <button id="addSite" class="primary">追加</button>
-      </div>
-      <div id="siteStatus" class="status"></div>
-      <div id="siteList" class="master-list"></div>
-    </article>
-    <article class="card">
-      <h2>作業班マスタ</h2>
-      <div class="inline">
-        <input id="teamName" placeholder="作業班名">
-        <button id="addTeam" class="primary">追加</button>
-      </div>
-      <div id="teamStatus" class="status"></div>
-      <div id="teamList" class="master-list"></div>
-    </article>
-    <article class="card">
-      <h2>作業員マスタ</h2>
-      <label>作業員ID<input id="workerId" placeholder="例：A001"></label>
-      <label>氏名<input id="workerName" placeholder="未入力時はIDを表示"></label>
-      <label>所属現場<select id="workerSite"><option value="">未設定</option></select></label>
-      <label>作業班<select id="workerTeam"><option value="">未設定</option></select></label>
-      <button id="saveWorker" class="primary full">登録・更新</button>
-      <div id="workerStatus" class="status"></div>
-      <div id="workerList" class="master-list"></div>
-    </article>
-  </div>
 </section>
 
 <section id="view-settings" class="view">
-  <article class="card cloud-control-card">
-    <div class="cloud-control-head">
-      <div>
-        <h2>クラウド同期</h2>
-        <p class="note">Firestoreを正式な保存先として、PC・スマホ間でマスタ・設定・測定結果を同期します。</p>
-      </div>
-      <span id="cloudModeBadge" class="master-status-badge">未接続</span>
-    </div>
-    <div class="cloud-info-grid">
-      <div><span>ログイン</span><strong id="cloudLoginState">未ログイン</strong></div>
-      <div><span>同期状態</span><strong id="cloudSyncState">待機中</strong></div>
-      <div><span>最終同期</span><strong id="cloudLastSync">—</strong></div>
-      <div><span>保存先</span><strong>Cloud Firestore</strong></div>
-    </div>
-    <div class="button-row">
-      <button id="cloudManualSync" type="button" class="primary">今すぐ同期</button>
-      <button id="cloudUploadLocal" type="button">端末データをクラウドへ反映</button>
-    </div>
-    <div id="cloudMessage" class="status"></div>
-    <p class="note">未ログイン時は端末内へ保存します。ログイン後はFirestoreが正式データとなり、通信復旧時に自動同期します。</p>
+  <article class="card">
+    <h2>設定</h2>
+    <label>測定時間（秒）<input id="duration" type="number" min="8" max="30" value="10"></label>
+    <label>本人通常値に使用する直近正常記録数<input id="baselineCount" type="number" min="3" max="30" value="10"></label>
+    <label>通常値成立に必要な最低記録数<input id="baselineMin" type="number" min="3" max="10" value="5"></label>
+    <button id="saveSettings" class="primary">設定保存</button>
+    <button id="exportJson">JSONバックアップ</button>
+    <label class="file-button">JSON復元<input id="importJson" type="file" accept=".json"></label>
+    <button id="clearRecords" class="danger">履歴削除</button>
+    <p class="note">個人ベースラインは、本人申告が「異常なし」で総合判定が「通常」の記録から作成します。</p>
   </article>
-  <div class="grid two">
-    <article class="card">
-      <h2>測定設定</h2>
-      <label>測定時間（秒）<input id="settingDuration" type="number" min="5" max="30" value="10"></label>
-      <label>注意WBGT<input id="settingWbgtYellow" type="number" step="0.1" value="28"></label>
-      <label>警戒WBGT<input id="settingWbgtOrange" type="number" step="0.1" value="31"></label>
-      <button id="saveSettings" class="primary">設定保存</button>
-      <div id="settingsStatus" class="status"></div>
-    </article>
-    <article class="card">
-      <h2>データ管理</h2>
-      <div class="button-stack">
-        <button id="exportJson">JSONバックアップ</button>
-        <button id="exportCsv">測定記録CSV</button>
-        <label class="file-button">JSONを復元<input id="importJson" type="file" accept=".json,application/json"></label>
-        <button id="clearRecords" class="danger">測定記録を全削除</button>
-      </div>
-      <p class="note">マスタ・設定・測定記録・実証評価を一括でバックアップします。</p>
-    </article>
-  </div>
 </section>
 </main>
 
-<footer>
-  Prototype Ver.12.0 第3段階 顔色・発汗・表情・目解析版／非接触スクリーニング。医療診断には使用できません。
-</footer>
-<script type="module" src="face-landmarker.js?v=1200s3"></script>
-<script src="app.js?v=1200s3"></script>
-<script type="module" src="firebase-cloud.js?v=1200s3"></script>
-<script src="device-mode.js?v=1200s3"></script>
+<footer>Prototype Ver.12.0 第4段階／口元AIは使用しません。</footer>
+<script type="module" src="face-landmarker.js?v=1200s4"></script>
+<script src="app.js?v=1200s4"></script>
+<script src="device-mode.js?v=1200s4"></script>
+<script type="module" src="firebase-cloud.js?v=1200s4"></script>
 </body>
 </html>
