@@ -51,17 +51,17 @@ function renderMaster(){
   const db=loadDB();renderAllSelectors();
   $("siteList").innerHTML=db.sites.length?db.sites.map((x,i)=>`<div class="master-item"><span>${esc(x)}</span><button data-del-site="${i}">削除</button></div>`).join(""):"現場は未登録です。";
   $("teamList").innerHTML=db.teams.length?db.teams.map((x,i)=>`<div class="master-item"><span>${esc(x)}</span><button data-del-team="${i}">削除</button></div>`).join(""):"作業班は未登録です。";
-  $("workerList").innerHTML=db.workers.length?db.workers.map(w=>`<div class="master-item"><span><strong>${esc(w.id)}</strong> ${esc(w.name||w.id)}<br><small>${esc(w.site||"現場未設定")}／${esc(w.team||"班未設定")}／${esc(w.load||"medium")}</small></span><span><button data-edit-worker="${esc(w.id)}">編集</button> <button data-del-worker="${esc(w.id)}">削除</button></span></div>`).join(""):"作業員は未登録です。";
+  $("workerList").innerHTML=db.workers.length?db.workers.map(w=>`<div class="master-item"><span><strong>${esc(w.id)}</strong> ${esc(w.name||w.id)}<br><small>${esc(w.site||"現場未設定")}／${esc(w.team||"班未設定")}</small></span><span><button data-edit-worker="${esc(w.id)}">編集</button> <button data-del-worker="${esc(w.id)}">削除</button></span></div>`).join(""):"作業員は未登録です。";
   document.querySelectorAll("[data-del-site]").forEach(b=>b.onclick=()=>{const d=loadDB();d.sites.splice(Number(b.dataset.delSite),1);saveDB(d);renderMaster();});
   document.querySelectorAll("[data-del-team]").forEach(b=>b.onclick=()=>{const d=loadDB();d.teams.splice(Number(b.dataset.delTeam),1);saveDB(d);renderMaster();});
   document.querySelectorAll("[data-del-worker]").forEach(b=>b.onclick=()=>{if(!confirm("作業員を削除しますか？"))return;const d=loadDB();d.workers=d.workers.filter(w=>w.id!==b.dataset.delWorker);saveDB(d);renderMaster();renderAllSelectors();});
-  document.querySelectorAll("[data-edit-worker]").forEach(b=>b.onclick=()=>{const w=loadDB().workers.find(x=>x.id===b.dataset.editWorker);if(!w)return;$("workerId").value=w.id;$("workerName").value=w.name||"";$("workerSite").value=w.site||"";$("workerTeam").value=w.team||"";$("workerLoad").value=w.load||"medium";});
+  document.querySelectorAll("[data-edit-worker]").forEach(b=>b.onclick=()=>{const w=loadDB().workers.find(x=>x.id===b.dataset.editWorker);if(!w)return;$("workerId").value=w.id;$("workerName").value=w.name||"";$("workerSite").value=w.site||"";$("workerTeam").value=w.team||"";});
 }
 $("addSite").onclick=()=>{const v=$("siteName").value.trim();if(!v)return setStatus("siteStatus","現場名を入力してください。","error");const d=loadDB();if(!d.sites.includes(v))d.sites.push(v);saveDB(d);$("siteName").value="";setStatus("siteStatus","追加完了："+v,"success");renderMaster();};
 $("addTeam").onclick=()=>{const v=$("teamName").value.trim();if(!v)return setStatus("teamStatus","作業班名を入力してください。","error");const d=loadDB();if(!d.teams.includes(v))d.teams.push(v);saveDB(d);$("teamName").value="";setStatus("teamStatus","追加完了："+v,"success");renderMaster();};
-$("saveWorker").onclick=()=>{const id=normalizeId($("workerId").value);if(!id)return setStatus("workerStatus","作業員IDを入力してください。","error");const d=loadDB();const item={id,name:$("workerName").value.trim()||id,site:$("workerSite").value,team:$("workerTeam").value,load:$("workerLoad").value,active:true};const i=d.workers.findIndex(w=>w.id===id);if(i>=0)d.workers[i]={...d.workers[i],...item};else d.workers.push(item);saveDB(d);setStatus("workerStatus","登録完了："+item.name+"（"+id+"）","success");$("workerId").value="";$("workerName").value="";renderMaster();renderAllSelectors();};
+$("saveWorker").onclick=()=>{const id=normalizeId($("workerId").value);if(!id)return setStatus("workerStatus","作業員IDを入力してください。","error");const d=loadDB();const item={id,name:$("workerName").value.trim()||id,site:$("workerSite").value,team:$("workerTeam").value,active:true};const i=d.workers.findIndex(w=>w.id===id);if(i>=0)d.workers[i]={...d.workers[i],...item};else d.workers.push(item);saveDB(d);setStatus("workerStatus","登録完了："+item.name+"（"+id+"）","success");$("workerId").value="";$("workerName").value="";renderMaster();renderAllSelectors();};
 
-$("measureWorker").onchange=()=>{const w=loadDB().workers.find(x=>x.id===$("measureWorker").value);$("measureWorkerInfo").textContent=w?`${w.name}／${w.site||"現場未設定"}／${w.team||"班未設定"}／${w.load||"medium"}`:"作業員を選択してください。";};
+$("measureWorker").onchange=()=>{const w=loadDB().workers.find(x=>x.id===$("measureWorker").value);$("measureWorkerInfo").textContent=w?`${w.name}／${w.site||"現場未設定"}／${w.team||"班未設定"}`:"作業員を選択してください。";};
 
 async function startCamera(){
   try{
@@ -95,7 +95,6 @@ function evaluate(worker,frames){
   else if(wbgt!==null&&wbgt>=db.settings.wbgtYellow){raise("yellow");reasons.push(`WBGT ${wbgt}℃で注意基準以上`);}
   if(hydration==="none"){raise("orange");reasons.push("水分補給ができていない");}
   else if(hydration==="partial"){raise("yellow");reasons.push("水分補給が少なめ");}
-  if(worker.load==="high"&&wbgt!==null&&wbgt>=db.settings.wbgtYellow){raise("orange");reasons.push("重作業と高WBGTが重なっている");}
   if(brightness<45||brightness>220){raise("yellow");reasons.push("撮影環境の明るさが不適切");}
   if(asymmetry>7){raise("yellow");reasons.push("顔の左右差が大きく再測定推奨");}
   if(variation>18){raise("yellow");reasons.push("測定中の動きが大きい");}
@@ -105,7 +104,23 @@ function evaluate(worker,frames){
     level==="orange"?["作業を中断して休憩する","水分・塩分を補給する","管理者が本人を確認し再測定する"]:
     level==="yellow"?["短時間休憩し水分補給する","撮影条件を整えて再測定する","違和感があれば作業を中止する"]:
     ["通常どおりでも定期的に休憩する","水分補給を継続する","本人の異常時は結果に関係なく中止する"];
-  return {level,reasons,actions,metrics:{brightness:+brightness.toFixed(1),asymmetry:+asymmetry.toFixed(2),motion:+variation.toFixed(2),redness:+redness.toFixed(1)},wbgt,abnormal,hydration};
+  const faceColor=Math.abs(redness)>25?"大":Math.abs(redness)>14?"中":"小";
+  const symmetry=asymmetry>7?"大":asymmetry>4?"中":"小";
+  const movement=variation>18?"大":variation>10?"中":"小";
+  const lighting=(brightness>=65&&brightness<=200)?"適正":(brightness>=45&&brightness<=220)?"注意":"不適正";
+  let qualityScore=100;
+  if(lighting==="注意")qualityScore-=20;
+  if(lighting==="不適正")qualityScore-=45;
+  if(symmetry==="大")qualityScore-=20;
+  if(movement==="大")qualityScore-=25;
+  const quality=qualityScore>=80?"高":qualityScore>=55?"中":"低";
+  const confidence=Math.max(20,Math.min(99,qualityScore));
+  return {
+    level,reasons,actions,
+    metrics:{brightness:+brightness.toFixed(1),asymmetry:+asymmetry.toFixed(2),motion:+variation.toFixed(2),redness:+redness.toFixed(1)},
+    indicators:{faceColor,symmetry,movement,lighting},
+    quality,confidence,wbgt,abnormal,hydration
+  };
 }
 async function startMeasure(){
   if(measuring)return;
@@ -122,20 +137,62 @@ async function startMeasure(){
       await new Promise(r=>setTimeout(r,400));
     }
     const ev=evaluate(worker,frames);
-    const record={id:uid(),createdAt:new Date().toISOString(),workerId:worker.id,workerName:worker.name,site:worker.site||"",team:worker.team||"",load:worker.load||"medium",...ev,validation:null};
+    const record={id:uid(),createdAt:new Date().toISOString(),workerId:worker.id,workerName:worker.name,site:worker.site||"",team:worker.team||"",...ev,validation:null};
     const d=loadDB();d.records.unshift(record);saveDB(d);showResult(record);renderDashboard();renderValidation();renderWorkerCard();
     $("cameraMessage").textContent="測定完了。";
   }catch(e){$("cameraMessage").textContent="測定エラー："+(e.message||e);}
   finally{measuring=false;$("startMeasure").disabled=!stream;}
 }
 $("startMeasure").onclick=startMeasure;
+function indicatorClass(value){
+  if(["小","適正","高"].includes(value))return "ok";
+  if(["中","注意"].includes(value))return "caution";
+  return "alert";
+}
 function showResult(r){
-  $("measureResult").classList.remove("hidden");$("resultStatus").textContent=LEVELS[r.level].label;
-  $("resultBadge").textContent=LEVELS[r.level].label;$("resultBadge").className="badge "+r.level;
-  $("resultReasons").innerHTML=r.reasons.map(x=>`<li>${esc(x)}</li>`).join("");
-  $("resultActions").innerHTML=r.actions.map(x=>`<li>${esc(x)}</li>`).join("");
-  $("resultMetrics").innerHTML=Object.entries(r.metrics).map(([k,v])=>`<span class="metric">${esc(k)}：${v}</span>`).join("")+(r.wbgt!==null?`<span class="metric">WBGT：${r.wbgt}℃</span>`:"");
-  $("measureResult").scrollIntoView({behavior:"smooth"});
+  const label=LEVELS[r.level].label;
+  const summaries={
+    green:"大きな変化は確認されませんでした。本人の状態を確認しながら作業してください。",
+    yellow:"軽度の変化または測定条件の影響があります。休憩・水分補給後の再測定を推奨します。",
+    orange:"複数の注意要因が確認されました。作業を中断し、管理者が本人を確認してください。",
+    red:"本人の体調異常を優先し、直ちに作業を中止して管理者が確認してください。"
+  };
+  $("measureResult").classList.remove("hidden");
+  $("resultHero").className="result-hero "+r.level;
+  $("resultStatus").textContent=label;
+  $("resultSummary").textContent=summaries[r.level]||"測定結果を確認してください。";
+  $("resultBadge").textContent=label;
+  $("resultBadge").className="badge "+r.level;
+  $("resultReasons").innerHTML=r.reasons.map(x=>`<li><span class="list-icon">●</span>${esc(x)}</li>`).join("");
+  $("resultActions").innerHTML=r.actions.map((x,i)=>`<li><span class="action-number">${i+1}</span>${esc(x)}</li>`).join("");
+
+  const indicators=r.indicators||{
+    faceColor:Math.abs(r.metrics?.redness||0)>25?"大":Math.abs(r.metrics?.redness||0)>14?"中":"小",
+    symmetry:(r.metrics?.asymmetry||0)>7?"大":(r.metrics?.asymmetry||0)>4?"中":"小",
+    movement:(r.metrics?.motion||0)>18?"大":(r.metrics?.motion||0)>10?"中":"小",
+    lighting:((r.metrics?.brightness||0)>=65&&(r.metrics?.brightness||0)<=200)?"適正":"注意"
+  };
+  const indicatorItems=[
+    ["顔色変化",indicators.faceColor,"顔の色成分の変化"],
+    ["顔の左右差",indicators.symmetry,"左右領域の明るさ差"],
+    ["顔の動き",indicators.movement,"測定中の変動"],
+    ["撮影環境",indicators.lighting,"顔領域の明るさ"]
+  ];
+  $("resultIndicators").innerHTML=indicatorItems.map(([name,value,desc])=>`
+    <div class="indicator-card ${indicatorClass(value)}">
+      <span>${esc(name)}</span><strong>${esc(value)}</strong><small>${esc(desc)}</small>
+    </div>`).join("");
+
+  const quality=r.quality||"中",confidence=r.confidence??70;
+  $("resultQuality").innerHTML=`
+    <div><span>測定品質</span><strong class="quality-${indicatorClass(quality)}">${esc(quality)}</strong></div>
+    <div><span>参考信頼度</span><strong>${confidence}%</strong></div>
+    <p>${quality==="低"?"撮影条件を整え、再測定してください。":"測定値は参考情報として管理者判断と合わせて使用してください。"}</p>`;
+  const metricLabels={brightness:"明るさ",asymmetry:"左右差",motion:"動き",redness:"顔色差"};
+  $("resultMetrics").innerHTML=Object.entries(r.metrics||{}).map(([k,v])=>`<span class="metric">${metricLabels[k]||esc(k)}：${v}</span>`).join("")
+    +(r.wbgt!==null?`<span class="metric">WBGT：${r.wbgt}℃</span>`:"")
+    +`<span class="metric">体調異常：${r.abnormal?"あり":"なし"}</span>`;
+  $("measureResult").scrollIntoView({behavior:"smooth",block:"start"});
 }
 
 function filteredValidation(){
@@ -181,7 +238,7 @@ function table(rows){
 function renderWorkerCard(){
   renderAllSelectors();const id=$("workerCardSelect").value,db=loadDB(),w=db.workers.find(x=>x.id===id);
   if(!w){$("workerProfile").textContent="作業員を選択してください。";$("workerSummary").innerHTML="";$("workerRecords").innerHTML="";drawChart([]);return;}
-  $("workerProfile").textContent=`${w.name}（${w.id}）／${w.site||"現場未設定"}／${w.team||"班未設定"}／${w.load||"medium"}`;
+  $("workerProfile").textContent=`${w.name}（${w.id}）／${w.site||"現場未設定"}／${w.team||"班未設定"}`;
   const period=$("workerCardPeriod").value,cut=period==="all"?0:Date.now()-Number(period)*86400000;
   const rows=db.records.filter(r=>r.workerId===id&&(!cut||new Date(r.createdAt).getTime()>=cut)).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
   const alerts=rows.filter(r=>LEVELS[r.level].rank>=1).length,avgW=rows.filter(r=>r.wbgt!==null).reduce((s,r)=>s+r.wbgt,0)/(rows.filter(r=>r.wbgt!==null).length||1);
@@ -207,4 +264,4 @@ function init(){
 }
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 init();
-console.info("現場 AIコンディションチェック Ver.11.0 読込完了");
+console.info("現場 AIコンディションチェック Ver.11.1 読込完了");
