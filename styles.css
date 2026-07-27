@@ -595,3 +595,10 @@
   font-size:.8rem;
   color:#60777b;
 }
+
+
+/* Ver.12.0 第3段階：目の状態解析 */
+.face-ai-card:not(.pending):nth-child(4){
+  border-color:#c9c4ee;
+  background:#faf9ff;
+}

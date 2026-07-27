@@ -1,13 +1,13 @@
-const CACHE="heat-check-v12-stage2-expression";
+const CACHE="heat-check-v12-stage3-eye";
 const FILES=[
   "./",
   "./index.html",
-  "./styles.css?v=1200s2",
-  "./app.js?v=1200s2",
-  "./firebase-cloud.js?v=1200s2",
-  "./device-mode.js?v=1200s2",
-  "./face-landmarker.js?v=1200s2",
-  "./manifest.webmanifest?v=1200s2"
+  "./styles.css?v=1200s3",
+  "./app.js?v=1200s3",
+  "./firebase-cloud.js?v=1200s3",
+  "./device-mode.js?v=1200s3",
+  "./face-landmarker.js?v=1200s3",
+  "./manifest.webmanifest?v=1200s3"
 ];
 self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <title>現場 AIコンディションチェック Ver.12.0</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1200s2">
-  <link rel="stylesheet" href="styles.css?v=1200s2">
+  <link rel="manifest" href="manifest.webmanifest?v=1200s3">
+  <link rel="stylesheet" href="styles.css?v=1200s3">
 </head>
 <body>
 <header class="app-header">
@@ -15,7 +15,7 @@
     <p>非接触スクリーニング／顔状態チェック</p>
   </div>
   <div class="header-right">
-      <span class="version">Ver.12.0 第2段階 顔色・発汗・表情解析版</span>
+      <span class="version">Ver.12.0 第3段階 顔色・発汗・表情・目解析版</span>
       <div class="device-mode-switch" aria-label="端末モード">
         <button id="modeKioskButton" type="button">撮影端末</button>
         <button id="modeAdminButton" type="button">管理PC</button>
@@ -127,7 +127,7 @@
       <section class="simple-result-section face-ai-section">
         <div class="face-ai-heading">
           <div>
-            <h3>AI顔解析（第2段階）</h3>
+            <h3>AI顔解析（第3段階）</h3>
             <p id="faceAiStageNote" class="face-ai-note"></p>
           </div>
           <div class="face-ai-overall">
@@ -151,8 +151,10 @@
             <strong id="faceAiExpression">—</strong>
             <small id="faceAiExpressionLabel">未解析</small>
           </article>
-          <article class="face-ai-card pending">
-            <span>④ 目の状態</span><strong>次段階</strong><small>未実装</small>
+          <article class="face-ai-card">
+            <span>④ 目の状態</span>
+            <strong id="faceAiEye">—</strong>
+            <small id="faceAiEyeLabel">未解析</small>
           </article>
           <article class="face-ai-card pending">
             <span>⑤ 口元解析</span><strong>次段階</strong><small>未実装</small>
@@ -451,11 +453,11 @@
 </main>
 
 <footer>
-  Prototype Ver.12.0 第2段階 顔色・発汗・表情解析版／非接触スクリーニング。医療診断には使用できません。
+  Prototype Ver.12.0 第3段階 顔色・発汗・表情・目解析版／非接触スクリーニング。医療診断には使用できません。
 </footer>
-<script type="module" src="face-landmarker.js?v=1200s2"></script>
-<script src="app.js?v=1200s2"></script>
-<script type="module" src="firebase-cloud.js?v=1200s2"></script>
-<script src="device-mode.js?v=1200s2"></script>
+<script type="module" src="face-landmarker.js?v=1200s3"></script>
+<script src="app.js?v=1200s3"></script>
+<script type="module" src="firebase-cloud.js?v=1200s3"></script>
+<script src="device-mode.js?v=1200s3"></script>
 </body>
 </html>

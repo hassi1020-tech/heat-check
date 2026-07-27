@@ -20,7 +20,7 @@
   function updateUrl(mode){
     const url=new URL(location.href);
     url.searchParams.set("mode",mode);
-    url.searchParams.set("v","1200s2");
+    url.searchParams.set("v","1200s3");
     history.replaceState(null,"",url);
   }
   function setActiveButtons(mode){

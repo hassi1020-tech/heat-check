@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id);
 let stream=null, measuring=false, guideTimer=null;
 
 function defaultDB(){
-  return {version:"12.0-stage2",sites:[],teams:[],workers:[],records:[],settings:{duration:10,wbgtYellow:28,wbgtOrange:31},updatedAt:new Date().toISOString()};
+  return {version:"12.0-stage3",sites:[],teams:[],workers:[],records:[],settings:{duration:10,wbgtYellow:28,wbgtOrange:31},updatedAt:new Date().toISOString()};
 }
 function loadDB(){
   try{
@@ -226,6 +226,17 @@ function evaluate(worker,frames){
   const mouthCornerDown=expressionAvg("mouthCornerDown");
   const jawActivity=expressionAvg("jawActivity");
   const expressionAvailable=expressionFrames.length>=Math.max(2,Math.floor(frames.length*0.35));
+  const eyeFrames=frames.filter(x=>x.eyeAvailable);
+  const lastEye=eyeFrames.at(-1)||{};
+  const eyeAvailable=eyeFrames.length>=Math.max(2,Math.floor(frames.length*0.35));
+  const eyeRisk=eyeAvailable?Math.round(Number(lastEye.eyeRisk)||0):0;
+  const eyeOpenness=eyeAvailable?Number(lastEye.eyeOpenness)||0:0;
+  const eyeAsymmetry=eyeAvailable?Number(lastEye.eyeAsymmetry)||0:0;
+  const blinkCount=eyeAvailable?Number(lastEye.blinkCount)||0:0;
+  const blinkRate=eyeAvailable?Number(lastEye.blinkRate)||0:0;
+  const maxClosureMs=eyeAvailable?Number(lastEye.maxClosureMs)||0:0;
+  const prolongedClosureCount=eyeAvailable?Number(lastEye.prolongedClosureCount)||0:0;
+  const closedRatio=eyeAvailable?Number(lastEye.closedRatio)||0:0;
   const colorVariation=Math.sqrt(frames.reduce((s,x)=>s+(x.cheekRedness-avg("cheekRedness"))**2,0)/frames.length);
 
   // 第1段階：顔色・発汗の観察スコア（医療診断ではない）
@@ -238,9 +249,10 @@ function evaluate(worker,frames){
   );
   const sweatRisk=Math.round(Math.min(100,Math.max(0,sweatIndex)));
   const faceAiRisk=Math.round(
-    faceColorRisk*0.55+
-    sweatRisk*0.15+
-    (expressionAvailable?expressionRisk:faceColorRisk)*0.30
+    faceColorRisk*0.45+
+    sweatRisk*0.12+
+    (expressionAvailable?expressionRisk:faceColorRisk)*0.23+
+    (eyeAvailable?eyeRisk:faceColorRisk)*0.20
   );
   const wbgt=Number($("measureWbgt").value)||null,abnormal=$("conditionAbnormal").value==="yes",hydration=$("hydration").value;
   let level="green",reasons=[],actions=[];
@@ -267,6 +279,14 @@ function evaluate(worker,frames){
     reasons.push("表情に軽度の変化傾向");
   }else if(!expressionAvailable){
     reasons.push("表情AIは未取得または顔検出不足");
+  }
+  if(eyeAvailable && eyeRisk>=70){
+    reasons.push("開眼率低下または長めの閉眼を検出");
+    if(expressionRisk>=55 || faceColorRisk>=55)raise("yellow");
+  }else if(eyeAvailable && eyeRisk>=45){
+    reasons.push("目の状態に軽度の変化傾向");
+  }else if(!eyeAvailable){
+    reasons.push("目の状態解析は未取得または顔検出不足");
   }
   if(!reasons.length)reasons.push("重大な変化は検出されませんでした");
   actions=level==="red"?["直ちに作業を中止する","涼しい場所で管理者が本人を確認する","必要に応じて救急要請・医療機関へ連絡する"]:
@@ -300,6 +320,20 @@ function evaluate(worker,frames){
         expressionRisk>=70?"大きな表情変化":
         expressionRisk>=45?"軽度の表情変化":"通常範囲",
       expressionConfidence:expressionAvailable?expressionConfidence:0,
+      eyeRisk:eyeAvailable?eyeRisk:null,
+      eyeAvailable,
+      eyeLabel:!eyeAvailable?"解析できません":
+        eyeRisk>=70?"閉眼・開眼状態に大きな変化":
+        eyeRisk>=45?"目の状態に軽度変化":"通常範囲",
+      eyeMetrics:{
+        openness:+eyeOpenness.toFixed(1),
+        asymmetry:+eyeAsymmetry.toFixed(1),
+        blinkCount:Math.round(blinkCount),
+        blinkRate:+blinkRate.toFixed(1),
+        maxClosureMs:Math.round(maxClosureMs),
+        prolongedClosureCount:Math.round(prolongedClosureCount),
+        closedRatio:+closedRatio.toFixed(1)
+      },
       colorLabel:faceColorRisk>=72?"大きな変化":faceColorRisk>=48?"軽度変化":"通常範囲",
       sweatLabel:sweatRisk>=75?"増加傾向":sweatRisk>=45?"やや増加":"判定上大きな変化なし",
       confidence:Math.round(Math.max(20,Math.min(99,qualityScore*0.85+15))),
@@ -316,7 +350,7 @@ function evaluate(worker,frames){
         mouthCornerDown:+mouthCornerDown.toFixed(1),
         jawActivity:+jawActivity.toFixed(1)
       },
-      disclaimer:"顔色・皮膚光沢・表情係数の変化傾向であり、熱中症・脱水・疲労・感情の医学的診断ではありません。"
+      disclaimer:"顔色・皮膚光沢・表情係数・目の開閉傾向であり、熱中症・脱水・眠気・疲労・感情の医学的診断ではありません。"
     }
   };
 }
@@ -326,6 +360,7 @@ async function startMeasure(){
   if(!worker)return alert("作業員を選択してください。");
   if(!stream)return alert("カメラを開始してください。");
   measuring=true;$("startMeasure").disabled=true;$("faceGuide").classList.add("guide-measuring");
+  window.FaceExpressionAI?.resetEyeSession?.();
   const frames=[],sec=Math.max(5,Math.min(30,db.settings.duration||10)),start=Date.now();
   try{
     while(Date.now()-start<sec*1000){
@@ -340,6 +375,15 @@ async function startMeasure(){
         frame.eyeTension=Number(expression?.features?.eyeTension)||0;
         frame.mouthCornerDown=Number(expression?.features?.mouthCornerDown)||0;
         frame.jawActivity=Number(expression?.features?.jawActivity)||0;
+        frame.eyeAvailable=!!expression?.eye?.available;
+        frame.eyeRisk=Number(expression?.eye?.eyeRisk)||0;
+        frame.eyeOpenness=Number(expression?.eye?.openness)||0;
+        frame.eyeAsymmetry=Number(expression?.eye?.asymmetry)||0;
+        frame.blinkCount=Number(expression?.eye?.blinkCount)||0;
+        frame.blinkRate=Number(expression?.eye?.blinkRate)||0;
+        frame.maxClosureMs=Number(expression?.eye?.maxClosureMs)||0;
+        frame.prolongedClosureCount=Number(expression?.eye?.prolongedClosureCount)||0;
+        frame.closedRatio=Number(expression?.eye?.closedRatio)||0;
       }
       frames.push(frame);
       const left=Math.ceil(sec-(Date.now()-start)/1000);
@@ -388,8 +432,12 @@ function showResult(r){
     faceAI.expressionAvailable ? `${Math.max(0,100-(faceAI.expressionRisk??0))}点` : "再測定";
   if($("faceAiExpressionLabel")) $("faceAiExpressionLabel").textContent=
     faceAI.expressionLabel||"未解析";
+  if($("faceAiEye")) $("faceAiEye").textContent=
+    faceAI.eyeAvailable ? `${Math.max(0,100-(faceAI.eyeRisk??0))}点` : "再測定";
+  if($("faceAiEyeLabel")) $("faceAiEyeLabel").textContent=
+    faceAI.eyeLabel||"未解析";
   if($("faceAiStageNote")) $("faceAiStageNote").textContent=
-    "第2段階では顔色・皮膚光沢に加え、MediaPipeの表情係数を解析します。目・口元の時系列解析は次段階です。";
+    "第3段階では顔色・皮膚光沢・表情に加え、瞬き、開眼率、閉眼時間、左右差を時系列解析します。";
 
   $("resultReasons").innerHTML = r.reasons.slice(0,5)
     .map(reason => `<li><span class="check-mark">✓</span><span>${esc(reason)}</span></li>`)
@@ -425,7 +473,15 @@ function showResult(r){
     ["眉の緊張指数", r.faceAI?.regions?.browTension ?? "—"],
     ["目周辺の緊張指数", r.faceAI?.regions?.eyeTension ?? "—"],
     ["口角低下指数", r.faceAI?.regions?.mouthCornerDown ?? "—"],
-    ["顎活動指数", r.faceAI?.regions?.jawActivity ?? "—"]
+    ["顎活動指数", r.faceAI?.regions?.jawActivity ?? "—"],
+    ["目の状態スコア", r.faceAI?.eyeAvailable ? `${Math.max(0,100-(r.faceAI.eyeRisk??0))}点` : "未取得"],
+    ["平均開眼率", r.faceAI?.eyeMetrics?.openness ?? "—"],
+    ["瞬き回数", r.faceAI?.eyeMetrics?.blinkCount ?? "—"],
+    ["瞬き換算回数/分", r.faceAI?.eyeMetrics?.blinkRate ?? "—"],
+    ["最大閉眼時間", r.faceAI?.eyeMetrics?.maxClosureMs != null ? `${r.faceAI.eyeMetrics.maxClosureMs}ms` : "—"],
+    ["長時間閉眼回数", r.faceAI?.eyeMetrics?.prolongedClosureCount ?? "—"],
+    ["目の左右差", r.faceAI?.eyeMetrics?.asymmetry ?? "—"],
+    ["両眼閉眼比率", r.faceAI?.eyeMetrics?.closedRatio ?? "—"]
   ];
 
   $("resultMetrics").innerHTML = detailItems.map(([name,value]) => `
@@ -495,7 +551,7 @@ function drawChart(rows){
 
 $("saveSettings").onclick=()=>{const d=loadDB();d.settings.duration=Math.max(5,Math.min(30,Number($("settingDuration").value)||10));d.settings.wbgtYellow=Number($("settingWbgtYellow").value)||28;d.settings.wbgtOrange=Number($("settingWbgtOrange").value)||31;saveDB(d);setStatus("settingsStatus","設定を保存しました。","success");};
 $("exportJson").onclick=()=>download("heat-check-v11-backup.json",JSON.stringify(loadDB(),null,2),"application/json");
-$("exportCsv").onclick=()=>{const rows=loadDB().records,head=["日時","作業員ID","氏名","現場","作業班","判定","WBGT","体調異常","水分補給","明るさ","左右差","動き","顔色差","顔AI総合点","顔色点","発汗傾向点","表情点","表情AI信頼度","実証評価","所見"];const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;const csv="\ufeff"+[head,...rows.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level].label,r.wbgt,r.abnormal?"あり":"なし",r.hydration,r.metrics.brightness,r.metrics.asymmetry,r.metrics.motion,r.metrics.redness,Math.max(0,100-(r.faceAI?.overallRisk??0)),Math.max(0,100-(r.faceAI?.colorRisk??0)),Math.max(0,100-(r.faceAI?.sweatRisk??0)),r.faceAI?.expressionAvailable?Math.max(0,100-(r.faceAI?.expressionRisk??0)):"",r.faceAI?.expressionConfidence??"",r.validation?.result||"",r.validation?.comment||""])].map(a=>a.map(q).join(",")).join("\n");download("heat-check-v11-records.csv",csv,"text/csv");};
+$("exportCsv").onclick=()=>{const rows=loadDB().records,head=["日時","作業員ID","氏名","現場","作業班","判定","WBGT","体調異常","水分補給","明るさ","左右差","動き","顔色差","顔AI総合点","顔色点","発汗傾向点","表情点","表情AI信頼度","目の状態点","開眼率","瞬き回数","最大閉眼ms","長時間閉眼回数","実証評価","所見"];const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;const csv="\ufeff"+[head,...rows.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level].label,r.wbgt,r.abnormal?"あり":"なし",r.hydration,r.metrics.brightness,r.metrics.asymmetry,r.metrics.motion,r.metrics.redness,Math.max(0,100-(r.faceAI?.overallRisk??0)),Math.max(0,100-(r.faceAI?.colorRisk??0)),Math.max(0,100-(r.faceAI?.sweatRisk??0)),r.faceAI?.expressionAvailable?Math.max(0,100-(r.faceAI?.expressionRisk??0)):"",r.faceAI?.expressionConfidence??"",r.faceAI?.eyeAvailable?Math.max(0,100-(r.faceAI?.eyeRisk??0)):"",r.faceAI?.eyeMetrics?.openness??"",r.faceAI?.eyeMetrics?.blinkCount??"",r.faceAI?.eyeMetrics?.maxClosureMs??"",r.faceAI?.eyeMetrics?.prolongedClosureCount??"",r.validation?.result||"",r.validation?.comment||""])].map(a=>a.map(q).join(",")).join("\n");download("heat-check-v11-records.csv",csv,"text/csv");};
 $("importJson").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d.records)||!Array.isArray(d.workers))throw new Error();saveDB({...defaultDB(),...d});init();alert("復元しました。");}catch{alert("正しいバックアップファイルではありません。");}};rd.readAsText(f);e.target.value="";};
 $("clearRecords").onclick=()=>{if(!confirm("測定記録と実証評価をすべて削除しますか？"))return;const d=loadDB();d.records=[];saveDB(d);renderDashboard();renderValidation();renderWorkerCard();};
 
@@ -516,7 +572,7 @@ window.HeatCheckApp={
   }
 };
 init();
-console.info("現場 AIコンディションチェック Ver.12.0 第2段階 顔色・発汗・表情解析 読込完了");
+console.info("現場 AIコンディションチェック Ver.12.0 第3段階 顔色・発汗・表情・目解析 読込完了");
 
 
 /* =========================================================
