@@ -144,55 +144,70 @@ async function startMeasure(){
   finally{measuring=false;$("startMeasure").disabled=!stream;}
 }
 $("startMeasure").onclick=startMeasure;
-function indicatorClass(value){
-  if(["小","適正","高"].includes(value))return "ok";
-  if(["中","注意"].includes(value))return "caution";
-  return "alert";
-}
 function showResult(r){
-  const label=LEVELS[r.level].label;
-  const summaries={
-    green:"大きな変化は確認されませんでした。本人の状態を確認しながら作業してください。",
-    yellow:"軽度の変化または測定条件の影響があります。休憩・水分補給後の再測定を推奨します。",
-    orange:"複数の注意要因が確認されました。作業を中断し、管理者が本人を確認してください。",
-    red:"本人の体調異常を優先し、直ちに作業を中止して管理者が確認してください。"
+  const label = LEVELS[r.level].label;
+  const faceCondition =
+    r.level === "green" ? "良好" :
+    r.level === "yellow" ? "要確認" :
+    r.level === "orange" ? "注意" : "異常申告あり";
+
+  const summaries = {
+    green: "作業継続可能です。定期的な水分補給を続けてください。",
+    yellow: "軽度の注意要因があります。休憩後の再測定を推奨します。",
+    orange: "作業を中断し、管理者が本人の状態を確認してください。",
+    red: "直ちに作業を中止し、管理者が本人を確認してください。"
   };
+
+  const iconMap = {
+    green: "●",
+    yellow: "▲",
+    orange: "▲",
+    red: "×"
+  };
+
   $("measureResult").classList.remove("hidden");
-  $("resultHero").className="result-hero "+r.level;
-  $("resultStatus").textContent=label;
-  $("resultSummary").textContent=summaries[r.level]||"測定結果を確認してください。";
-  $("resultBadge").textContent=label;
-  $("resultBadge").className="badge "+r.level;
-  $("resultReasons").innerHTML=r.reasons.map(x=>`<li><span class="list-icon">●</span>${esc(x)}</li>`).join("");
-  $("resultActions").innerHTML=r.actions.map((x,i)=>`<li><span class="action-number">${i+1}</span>${esc(x)}</li>`).join("");
+  $("resultHero").className = "simple-result-hero " + r.level;
+  $("resultIcon").textContent = iconMap[r.level] || "●";
+  $("resultStatus").textContent = label;
+  $("resultSummary").textContent = summaries[r.level] || "測定結果を確認してください。";
+  $("faceCondition").textContent = faceCondition;
+  $("resultQualityText").textContent = r.quality || "中";
+  $("resultConfidence").textContent = `${r.confidence ?? 70}%`;
 
-  const indicators=r.indicators||{
-    faceColor:Math.abs(r.metrics?.redness||0)>25?"大":Math.abs(r.metrics?.redness||0)>14?"中":"小",
-    symmetry:(r.metrics?.asymmetry||0)>7?"大":(r.metrics?.asymmetry||0)>4?"中":"小",
-    movement:(r.metrics?.motion||0)>18?"大":(r.metrics?.motion||0)>10?"中":"小",
-    lighting:((r.metrics?.brightness||0)>=65&&(r.metrics?.brightness||0)<=200)?"適正":"注意"
-  };
-  const indicatorItems=[
-    ["顔色変化",indicators.faceColor,"顔の色成分の変化"],
-    ["顔の左右差",indicators.symmetry,"左右領域の明るさ差"],
-    ["顔の動き",indicators.movement,"測定中の変動"],
-    ["撮影環境",indicators.lighting,"顔領域の明るさ"]
+  $("resultReasons").innerHTML = r.reasons
+    .slice(0, 5)
+    .map(reason => `<li><span class="check-mark">✓</span>${esc(reason)}</li>`)
+    .join("");
+
+  $("resultActions").innerHTML = r.actions
+    .slice(0, 4)
+    .map(action => `<li>${esc(action)}</li>`)
+    .join("");
+
+  const indicators = r.indicators || {};
+  const detailItems = [
+    ["顔色変化", indicators.faceColor ?? "—"],
+    ["左右差", indicators.symmetry ?? "—"],
+    ["顔の動き", indicators.movement ?? "—"],
+    ["撮影環境", indicators.lighting ?? "—"],
+    ["明るさ", r.metrics?.brightness ?? "—"],
+    ["左右差数値", r.metrics?.asymmetry ?? "—"],
+    ["動き数値", r.metrics?.motion ?? "—"],
+    ["顔色差数値", r.metrics?.redness ?? "—"],
+    ["WBGT", r.wbgt !== null ? `${r.wbgt}℃` : "未入力"],
+    ["体調異常", r.abnormal ? "あり" : "なし"],
+    ["水分補給", r.hydration === "good" ? "できている" : r.hydration === "partial" ? "少なめ" : "できていない"]
   ];
-  $("resultIndicators").innerHTML=indicatorItems.map(([name,value,desc])=>`
-    <div class="indicator-card ${indicatorClass(value)}">
-      <span>${esc(name)}</span><strong>${esc(value)}</strong><small>${esc(desc)}</small>
-    </div>`).join("");
 
-  const quality=r.quality||"中",confidence=r.confidence??70;
-  $("resultQuality").innerHTML=`
-    <div><span>測定品質</span><strong class="quality-${indicatorClass(quality)}">${esc(quality)}</strong></div>
-    <div><span>参考信頼度</span><strong>${confidence}%</strong></div>
-    <p>${quality==="低"?"撮影条件を整え、再測定してください。":"測定値は参考情報として管理者判断と合わせて使用してください。"}</p>`;
-  const metricLabels={brightness:"明るさ",asymmetry:"左右差",motion:"動き",redness:"顔色差"};
-  $("resultMetrics").innerHTML=Object.entries(r.metrics||{}).map(([k,v])=>`<span class="metric">${metricLabels[k]||esc(k)}：${v}</span>`).join("")
-    +(r.wbgt!==null?`<span class="metric">WBGT：${r.wbgt}℃</span>`:"")
-    +`<span class="metric">体調異常：${r.abnormal?"あり":"なし"}</span>`;
-  $("measureResult").scrollIntoView({behavior:"smooth",block:"start"});
+  $("resultMetrics").innerHTML = detailItems
+    .map(([name, value]) => `
+      <div class="simple-detail-item">
+        <span>${esc(name)}</span>
+        <strong>${esc(value)}</strong>
+      </div>`)
+    .join("");
+
+  $("measureResult").scrollIntoView({behavior:"smooth", block:"start"});
 }
 
 function filteredValidation(){
@@ -264,4 +279,4 @@ function init(){
 }
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 init();
-console.info("現場 AIコンディションチェック Ver.11.1 読込完了");
+console.info("現場 AIコンディションチェック Ver.11.2 読込完了");

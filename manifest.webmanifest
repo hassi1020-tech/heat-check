@@ -1,7 +1,7 @@
 {
-  "name": "現場 AIコンディションチェック Ver.11.1",
+  "name": "現場 AIコンディションチェック Ver.11.2",
   "short_name": "HeatCheck",
-  "start_url": "./?v=1101",
+  "start_url": "./?v=1102",
   "display": "standalone",
   "background_color": "#f3f7f7",
   "theme_color": "#0f766e",

@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
-  <title>現場 AIコンディションチェック Ver.11.1</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1101">
-  <link rel="stylesheet" href="styles.css?v=1101">
+  <title>現場 AIコンディションチェック Ver.11.2</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1102">
+  <link rel="stylesheet" href="styles.css?v=1102">
 </head>
 <body>
 <header class="app-header">
@@ -14,7 +14,7 @@
     <h1>現場 AIコンディションチェック</h1>
     <p>非接触スクリーニング／顔状態チェック</p>
   </div>
-  <span class="version">Ver.11.1</span>
+  <span class="version">Ver.11.2</span>
 </header>
 
 <nav class="tabs" aria-label="画面切替">
@@ -78,21 +78,43 @@
     </article>
   </div>
 
-  <article id="measureResult" class="card result-card hidden">
-    <div id="resultHero" class="result-hero">
-      <div class="result-main">
-        <p class="eyebrow">AIコンディション評価</p>
+  <article id="measureResult" class="simple-result hidden">
+    <header id="resultHero" class="simple-result-hero">
+      <p class="simple-result-label">AIコンディション評価</p>
+      <div class="simple-result-status-row">
+        <span id="resultIcon" class="simple-result-icon">●</span>
         <h2 id="resultStatus">—</h2>
-        <p id="resultSummary" class="result-summary">測定結果を表示します。</p>
       </div>
-      <span id="resultBadge" class="badge">—</span>
-    </div>
+      <p id="resultSummary" class="simple-result-summary">測定結果を表示します。</p>
+      <div class="simple-result-meta">
+        <span>顔状態：<strong id="faceCondition">—</strong></span>
+        <span>測定品質：<strong id="resultQualityText">—</strong></span>
+        <span>信頼度：<strong id="resultConfidence">—</strong></span>
+      </div>
+    </header>
 
-    <div class="result-section-grid">
-      <section class="result-panel">
-        <h3>総合判定理由</h3>
-        <ul id="resultReasons" class="result-list"></ul>
+    <div class="simple-result-body">
+      <section class="simple-result-section">
+        <h3>判定理由</h3>
+        <ul id="resultReasons" class="simple-check-list"></ul>
       </section>
+
+      <section class="simple-result-section simple-action-section">
+        <h3>今やること</h3>
+        <ul id="resultActions" class="simple-action-list"></ul>
+      </section>
+
+      <details class="simple-details">
+        <summary>詳細を見る</summary>
+        <div id="resultMetrics" class="simple-detail-grid"></div>
+      </details>
+
+      <p class="simple-warning">
+        本アプリは医療診断を行いません。本人の訴えと管理者判断を優先してください。
+      </p>
+    </div>
+  </article>
+</section>
       <section class="result-panel action-panel">
         <h3>今すぐ実施すること</h3>
         <ul id="resultActions" class="result-list"></ul>
@@ -230,8 +252,8 @@
 </main>
 
 <footer>
-  Prototype Ver.11.1／非接触スクリーニング。医療診断には使用できません。
+  Prototype Ver.11.2／非接触スクリーニング。医療診断には使用できません。
 </footer>
-<script src="app.js?v=1101"></script>
+<script src="app.js?v=1102"></script>
 </body>
 </html>
