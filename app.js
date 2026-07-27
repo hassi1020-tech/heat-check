@@ -1433,7 +1433,7 @@ renderValidation();
 
 if($("addSiteMaster"))$("addSiteMaster").addEventListener("click",addSiteMaster);
 if($("addTeamMaster"))$("addTeamMaster").addEventListener("click",addTeamMaster);
-if($("addWorkerMaster"))$("addWorkerMaster").addEventListener("click",addWorkerMaster);
+bindWorkerRegistrationButton();
 if($("workerId"))$("workerId").addEventListener("change",fillWorkerFromMaster);
 if($("clearNotifications"))$("clearNotifications").addEventListener("click",clearNotifications);
 if($("adminTeam"))$("adminTeam").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();renderV10();});
@@ -1467,9 +1467,6 @@ if($("importAllData"))$("importAllData").addEventListener("change",async e=>{
   }catch{alert("バックアップファイルを復元できませんでした。");}
   e.target.value="";
 });
-renderMaster();
-renderNotifications();
-
 if($("adminDate")){
   $("adminDate").value=new Date().toISOString().slice(0,10);
   $("adminDate").addEventListener("change",()=>{renderAdminDashboard();renderAnalysis();renderV10();});
@@ -1507,7 +1504,7 @@ $("saveSettings").addEventListener("click",()=>{
 });
 
 loadSettings();
-$("guide").textContent="v10.4.1作業員登録反映修正版読込済み。作業員を選択してください。";
+$("guide").textContent="v10.4.2作業員登録・初期化順序修正版読込済み。作業員を選択してください。";
 if("serviceWorker" in navigator){
   navigator.serviceWorker.getRegistrations()
     .then(regs=>Promise.all(regs.map(r=>r.unregister())))
@@ -1690,7 +1687,11 @@ function addWorkerMaster(){
     if($(x))$(x).value="";
   });
 
-  alert(`作業員「${name}（${id}）」を登録し、かんたん測定へ反映しました。`);
+  const status=$("workerRegisterStatus");
+  if(status){
+    status.className="worker-register-status success";
+    status.textContent=`登録完了：${name}（${id}）を、かんたん測定へ反映しました。`;
+  }
 }
 function populateAdminTeams(){
   const select=$("adminTeam");if(!select)return;
@@ -2190,5 +2191,41 @@ function toggleMonitorMode(){
   const btn=$("openMonitorMode");
   if(btn)btn.textContent=active?"通常表示へ戻る":"大型モニター表示";
   if(active)window.scrollTo({top:0,behavior:"smooth"});
+}
+
+
+function bindWorkerRegistrationButton(){
+  const button=$("addWorkerMaster");
+  if(!button||button.dataset.boundWorkerRegistration==="1")return;
+  button.dataset.boundWorkerRegistration="1";
+  button.addEventListener("click",event=>{
+    event.preventDefault();
+    try{
+      addWorkerMaster();
+    }catch(err){
+      console.error("作業員登録エラー:",err);
+      const status=$("workerRegisterStatus");
+      if(status){
+        status.className="worker-register-status error";
+        status.textContent="登録に失敗しました。ページを再読み込みして、もう一度お試しください。";
+      }
+    }
+  });
+}
+
+/* Ver.10.4.2: all master constants/functions are defined before initial rendering. */
+try{
+  renderMaster();
+  renderNotifications();
+  fillWorkerFromMaster();
+  syncSimpleCondition();
+  console.info("v10.4.2 作業員登録・初期化順序修正版 読込完了");
+}catch(err){
+  console.error("初期化エラー:",err);
+  const summary=document.getElementById("selectedWorkerSummary");
+  if(summary){
+    summary.className="selected-worker-summary error";
+    summary.textContent="初期化エラーが発生しました。ページを再読み込みしてください。";
+  }
 }
 
