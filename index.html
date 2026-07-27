@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
   <title>現場 AIコンディションチェック Ver.11.2</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1102">
-  <link rel="stylesheet" href="styles.css?v=1102">
+  <link rel="manifest" href="manifest.webmanifest?v=1102s2">
+  <link rel="stylesheet" href="styles.css?v=1102s2">
 </head>
 <body>
 <header class="app-header">
@@ -78,22 +78,26 @@
     </article>
   </div>
 
-  <article id="measureResult" class="simple-result hidden">
+  <article id="measureResult" class="simple-result hidden" aria-live="polite">
     <header id="resultHero" class="simple-result-hero">
-      <p class="simple-result-label">AIコンディション評価</p>
+      <p class="simple-result-label">判定結果</p>
       <div class="simple-result-status-row">
-        <span id="resultIcon" class="simple-result-icon">●</span>
+        <span id="resultIcon" class="simple-result-icon" aria-hidden="true">●</span>
         <h2 id="resultStatus">—</h2>
       </div>
       <p id="resultSummary" class="simple-result-summary">測定結果を表示します。</p>
-      <div class="simple-result-meta">
-        <span>顔状態：<strong id="faceCondition">—</strong></span>
-        <span>測定品質：<strong id="resultQualityText">—</strong></span>
-        <span>信頼度：<strong id="resultConfidence">—</strong></span>
-      </div>
     </header>
 
     <div class="simple-result-body">
+      <section class="simple-result-section condition-section">
+        <h3>AIコンディション評価</h3>
+        <div class="condition-grid">
+          <div><span>顔状態</span><strong id="faceCondition">—</strong></div>
+          <div><span>測定品質</span><strong id="resultQualityText">—</strong></div>
+          <div><span>信頼度</span><strong id="resultConfidence">—</strong></div>
+        </div>
+      </section>
+
       <section class="simple-result-section">
         <h3>判定理由</h3>
         <ul id="resultReasons" class="simple-check-list"></ul>
@@ -110,29 +114,9 @@
       </details>
 
       <p class="simple-warning">
-        本アプリは医療診断を行いません。本人の訴えと管理者判断を優先してください。
+        本アプリは医療診断を行いません。本人の訴えと管理者判断を最優先してください。
       </p>
     </div>
-  </article>
-</section>
-      <section class="result-panel action-panel">
-        <h3>今すぐ実施すること</h3>
-        <ul id="resultActions" class="result-list"></ul>
-      </section>
-    </div>
-
-    <section class="result-panel">
-      <h3>AI測定結果</h3>
-      <div id="resultIndicators" class="indicator-grid"></div>
-    </section>
-
-    <section class="result-panel">
-      <h3>測定条件・信頼性</h3>
-      <div id="resultQuality" class="quality-box"></div>
-      <div id="resultMetrics" class="metrics"></div>
-    </section>
-
-    <p class="warning">本アプリは疾病・熱中症・脱水を診断しません。本人の訴えと管理者判断を最優先してください。</p>
   </article>
 </section>
 
@@ -254,6 +238,6 @@
 <footer>
   Prototype Ver.11.2／非接触スクリーニング。医療診断には使用できません。
 </footer>
-<script src="app.js?v=1102"></script>
+<script src="app.js?v=1102s2"></script>
 </body>
 </html>

@@ -1,11 +1,11 @@
 "use strict";
 const DB_KEY="heatCheckV11";
-const LEVELS={green:{label:"通常",rank:0},yellow:{label:"注意",rank:1},orange:{label:"警戒",rank:2},red:{label:"中止・確認",rank:3}};
+const LEVELS={green:{label:"通常",rank:0},yellow:{label:"注意",rank:1},orange:{label:"警戒",rank:2},red:{label:"作業中止",rank:3}};
 const $=id=>document.getElementById(id);
-let stream=null, measuring=false;
+let stream=null, measuring=false, guideTimer=null;
 
 function defaultDB(){
-  return {version:"11.0",sites:[],teams:[],workers:[],records:[],settings:{duration:10,wbgtYellow:28,wbgtOrange:31},updatedAt:new Date().toISOString()};
+  return {version:"11.2",sites:[],teams:[],workers:[],records:[],settings:{duration:10,wbgtYellow:28,wbgtOrange:31},updatedAt:new Date().toISOString()};
 }
 function loadDB(){
   try{
@@ -70,9 +70,20 @@ async function startCamera(){
     $("camera").srcObject=stream;await $("camera").play();
     $("startCamera").disabled=true;$("startMeasure").disabled=false;$("stopCamera").disabled=false;
     $("cameraMessage").textContent="顔を中央に合わせてください。";
+    startGuideMonitor();
   }catch(e){$("cameraMessage").textContent="カメラ開始エラー："+(e.message||e);}
 }
-function stopCamera(){stream?.getTracks().forEach(t=>t.stop());stream=null;$("camera").srcObject=null;$("startCamera").disabled=false;$("startMeasure").disabled=true;$("stopCamera").disabled=true;$("cameraMessage").textContent="カメラを開始してください。";}
+function stopCamera(){
+  if(guideTimer){clearInterval(guideTimer);guideTimer=null;}
+  stream?.getTracks().forEach(t=>t.stop());
+  stream=null;
+  $("camera").srcObject=null;
+  $("startCamera").disabled=false;
+  $("startMeasure").disabled=true;
+  $("stopCamera").disabled=true;
+  $("faceGuide").classList.remove("guide-ok","guide-warn");
+  $("cameraMessage").textContent="カメラを開始してください。";
+}
 $("startCamera").onclick=startCamera;$("stopCamera").onclick=stopCamera;
 
 function sampleFrame(){
@@ -82,6 +93,36 @@ function sampleFrame(){
   for(let y=35;y<205;y+=3)for(let x=35;x<205;x+=3){const i=(y*size+x)*4,br=(d[i]+d[i+1]+d[i+2])/3;sum+=br;r+=d[i];g+=d[i+1];b+=d[i+2];if(x<size/2)left+=br;else right+=br;n++;}
   return {brightness:sum/n,red:r/n,green:g/n,blue:b/n,asymmetry:Math.abs(left-right)/(sum||1)*100};
 }
+function startGuideMonitor(){
+  if(guideTimer)clearInterval(guideTimer);
+  guideTimer=setInterval(()=>{
+    if(!stream || measuring || $("camera").readyState<2)return;
+    try{
+      const s=sampleFrame();
+      const guide=$("faceGuide");
+      if(s.brightness<55){
+        guide.classList.remove("guide-ok");
+        guide.classList.add("guide-warn");
+        $("cameraMessage").textContent="少し暗いです。明るい場所へ移動してください。";
+      }else if(s.brightness>220){
+        guide.classList.remove("guide-ok");
+        guide.classList.add("guide-warn");
+        $("cameraMessage").textContent="光が強すぎます。逆光を避けてください。";
+      }else if(s.asymmetry>8){
+        guide.classList.remove("guide-ok");
+        guide.classList.add("guide-warn");
+        $("cameraMessage").textContent="顔を正面に向け、枠の中央に合わせてください。";
+      }else{
+        guide.classList.remove("guide-warn");
+        guide.classList.add("guide-ok");
+        $("cameraMessage").textContent="撮影できます。顔を動かさず撮影開始を押してください。";
+      }
+    }catch(e){
+      // 映像準備中は案内を変更しない
+    }
+  },700);
+}
+
 function evaluate(worker,frames){
   const db=loadDB(),avg=k=>frames.reduce((s,x)=>s+x[k],0)/frames.length;
   const brightness=avg("brightness"),asymmetry=avg("asymmetry");
@@ -127,7 +168,7 @@ async function startMeasure(){
   const db=loadDB(),worker=db.workers.find(w=>w.id===$("measureWorker").value);
   if(!worker)return alert("作業員を選択してください。");
   if(!stream)return alert("カメラを開始してください。");
-  measuring=true;$("startMeasure").disabled=true;
+  measuring=true;$("startMeasure").disabled=true;$("faceGuide").classList.add("guide-measuring");
   const frames=[],sec=Math.max(5,Math.min(30,db.settings.duration||10)),start=Date.now();
   try{
     while(Date.now()-start<sec*1000){
@@ -141,71 +182,60 @@ async function startMeasure(){
     const d=loadDB();d.records.unshift(record);saveDB(d);showResult(record);renderDashboard();renderValidation();renderWorkerCard();
     $("cameraMessage").textContent="測定完了。";
   }catch(e){$("cameraMessage").textContent="測定エラー："+(e.message||e);}
-  finally{measuring=false;$("startMeasure").disabled=!stream;}
+  finally{measuring=false;$("faceGuide").classList.remove("guide-measuring");$("startMeasure").disabled=!stream;}
 }
 $("startMeasure").onclick=startMeasure;
 function showResult(r){
-  const label = LEVELS[r.level].label;
   const faceCondition =
-    r.level === "green" ? "良好" :
-    r.level === "yellow" ? "要確認" :
-    r.level === "orange" ? "注意" : "異常申告あり";
+    r.abnormal ? "本人申告あり" :
+    r.indicators?.faceColor === "大" || r.indicators?.symmetry === "大" || r.indicators?.movement === "大" ? "要確認" :
+    r.level === "green" ? "良好" : "注意";
 
   const summaries = {
-    green: "作業継続可能です。定期的な水分補給を続けてください。",
-    yellow: "軽度の注意要因があります。休憩後の再測定を推奨します。",
+    green: "現時点で大きな変化は確認されていません。",
+    yellow: "軽度の注意要因があります。休憩と再確認を行ってください。",
     orange: "作業を中断し、管理者が本人の状態を確認してください。",
     red: "直ちに作業を中止し、管理者が本人を確認してください。"
   };
 
-  const iconMap = {
-    green: "●",
-    yellow: "▲",
-    orange: "▲",
-    red: "×"
-  };
+  const iconMap = {green:"●", yellow:"▲", orange:"▲", red:"×"};
 
   $("measureResult").classList.remove("hidden");
   $("resultHero").className = "simple-result-hero " + r.level;
   $("resultIcon").textContent = iconMap[r.level] || "●";
-  $("resultStatus").textContent = label;
-  $("resultSummary").textContent = summaries[r.level] || "測定結果を確認してください。";
+  $("resultStatus").textContent = LEVELS[r.level].label;
+  $("resultSummary").textContent = summaries[r.level];
   $("faceCondition").textContent = faceCondition;
   $("resultQualityText").textContent = r.quality || "中";
   $("resultConfidence").textContent = `${r.confidence ?? 70}%`;
 
-  $("resultReasons").innerHTML = r.reasons
-    .slice(0, 5)
-    .map(reason => `<li><span class="check-mark">✓</span>${esc(reason)}</li>`)
+  $("resultReasons").innerHTML = r.reasons.slice(0,5)
+    .map(reason => `<li><span class="check-mark">✓</span><span>${esc(reason)}</span></li>`)
     .join("");
 
-  $("resultActions").innerHTML = r.actions
-    .slice(0, 4)
+  $("resultActions").innerHTML = r.actions.slice(0,4)
     .map(action => `<li>${esc(action)}</li>`)
     .join("");
 
   const indicators = r.indicators || {};
   const detailItems = [
-    ["顔色変化", indicators.faceColor ?? "—"],
+    ["顔色", indicators.faceColor ?? "—"],
     ["左右差", indicators.symmetry ?? "—"],
-    ["顔の動き", indicators.movement ?? "—"],
+    ["動き", indicators.movement ?? "—"],
     ["撮影環境", indicators.lighting ?? "—"],
-    ["明るさ", r.metrics?.brightness ?? "—"],
+    ["WBGT", r.wbgt !== null ? `${r.wbgt}℃` : "未入力"],
+    ["自覚症状", r.abnormal ? "あり" : "なし"],
+    ["水分補給", r.hydration === "good" ? "できている" : r.hydration === "partial" ? "少なめ" : "できていない"],
+    ["明るさ数値", r.metrics?.brightness ?? "—"],
     ["左右差数値", r.metrics?.asymmetry ?? "—"],
     ["動き数値", r.metrics?.motion ?? "—"],
-    ["顔色差数値", r.metrics?.redness ?? "—"],
-    ["WBGT", r.wbgt !== null ? `${r.wbgt}℃` : "未入力"],
-    ["体調異常", r.abnormal ? "あり" : "なし"],
-    ["水分補給", r.hydration === "good" ? "できている" : r.hydration === "partial" ? "少なめ" : "できていない"]
+    ["顔色差数値", r.metrics?.redness ?? "—"]
   ];
 
-  $("resultMetrics").innerHTML = detailItems
-    .map(([name, value]) => `
-      <div class="simple-detail-item">
-        <span>${esc(name)}</span>
-        <strong>${esc(value)}</strong>
-      </div>`)
-    .join("");
+  $("resultMetrics").innerHTML = detailItems.map(([name,value]) => `
+    <div class="simple-detail-item">
+      <span>${esc(name)}</span><strong>${esc(value)}</strong>
+    </div>`).join("");
 
   $("measureResult").scrollIntoView({behavior:"smooth", block:"start"});
 }
@@ -279,4 +309,4 @@ function init(){
 }
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 init();
-console.info("現場 AIコンディションチェック Ver.11.2 読込完了");
+console.info("現場 AIコンディションチェック Ver.11.2 第2段階 読込完了");
