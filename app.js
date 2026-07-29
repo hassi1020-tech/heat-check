@@ -7,7 +7,7 @@ const mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let stream=null,measuring=false;
 
-function defaults(){return {version:"13.2-authstate",workers:[],records:[],settings:{duration:10,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
+function defaults(){return {version:"13.3-dashboard",workers:[],records:[],settings:{duration:10,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(DB_KEY)||"{}");return {...defaults(),...x,workers:Array.isArray(x.workers)?x.workers:[],records:Array.isArray(x.records)?x.records:[],settings:{...defaults().settings,...x.settings}}}catch{return defaults()}}
 function saveDB(db){localStorage.setItem(DB_KEY,JSON.stringify({...db,updatedAt:new Date().toISOString()}));window.dispatchEvent(new CustomEvent("heatcheck:updated"))}
 const uid=()=>crypto.randomUUID?.()||Date.now()+"-"+Math.random();
@@ -188,6 +188,7 @@ function render(){
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(confirm("削除しますか？")){const id=b.dataset.del;const d=loadDB();d.workers=d.workers.filter(w=>w.id!==id);saveDB(d);render();await window.HeatCheckCloud?.deleteWorker?.(id)}});
   const wid=$("historyWorker").value,rows=db.records.filter(r=>!wid||r.workerId===wid);
   $("historyList").innerHTML=rows.length?`<table><thead><tr><th>日時</th><th>作業員</th><th>判定</th><th>疲労</th><th>寝不足</th><th>体調変化</th><th>集中力</th></tr></thead><tbody>${rows.slice(0,100).map(r=>`<tr><td>${new Date(r.createdAt).toLocaleString("ja-JP")}</td><td>${esc(r.workerName)}</td><td>${LEVELS[r.level]}</td><td>${riskToScore(r.conditionAI?.fatigueRisk||0)}</td><td>${riskToScore(r.conditionAI?.sleepRisk||0)}</td><td>${riskToScore(r.conditionAI?.conditionRisk||0)}</td><td>${riskToScore(r.conditionAI?.focusRisk||0)}</td></tr>`).join("")}</tbody></table>`:"履歴なし";
+  renderDashboard();
 }
 $("historyWorker").onchange=render;
 $("saveSettings").onclick=()=>{const db=loadDB();db.settings.duration=clamp(Number($("duration").value)||10,8,30);db.settings.baselineCount=clamp(Number($("baselineCount").value)||10,3,30);db.settings.baselineMin=clamp(Number($("baselineMin").value)||5,3,10);saveDB(db);window.HeatCheckCloud?.saveSettings?.(db.settings);alert("保存しました。")};
@@ -197,6 +198,220 @@ $("importJson").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new
 $("clearRecords").onclick=()=>{if(confirm("測定履歴を全削除しますか？")){const db=loadDB();db.records=[];saveDB(db);render()}};
 $("exportCsv").onclick=()=>{const q=v=>`"${String(v??"").replace(/"/g,'""')}"`,db=loadDB(),head=["日時","作業員ID","氏名","現場","班","判定","WBGT","体調申告","睡眠申告","水分","顔色点","発汗点","表情点","目点","疲労点","寝不足点","体調変化点","集中力点","開眼率","瞬き/分","最大閉眼ms","通常値成立"];const rows=db.records.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level],r.wbgt,r.condition,r.sleep,r.hydration,riskToScore(r.ai.colorRisk),riskToScore(r.ai.sweatRisk),riskToScore(r.ai.expressionRisk),riskToScore(r.ai.eyeRisk),riskToScore(r.conditionAI.fatigueRisk),riskToScore(r.conditionAI.sleepRisk),riskToScore(r.conditionAI.conditionRisk),riskToScore(r.conditionAI.focusRisk),r.ai.openness,r.ai.blinkRate,r.ai.maxClosureMs,r.baseline?.ready?"済":"未"]);download("heat-check-v12-stage4.csv","\ufeff"+[head,...rows].map(a=>a.map(q).join(",")).join("\n"),"text/csv")};
 
-window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"13.2-authstate"};
+
+
+// ===== Ver.13.3 現場管理ダッシュボード =====
+const localDateKey = value => {
+  const d = value ? new Date(value) : new Date();
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+const levelRank = {red:4, orange:3, yellow:2, green:1, unmeasured:0};
+const levelClass = level => ["green","yellow","orange","red"].includes(level) ? level : "unmeasured";
+const formatTime = value => {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleTimeString("ja-JP", {hour:"2-digit", minute:"2-digit"});
+};
+const scoreOrDash = value => Number.isFinite(Number(value)) ? riskToScore(Number(value)) : "—";
+
+function ensureDashboardDefaults(){
+  if ($("dashboardDate") && !$("dashboardDate").value) $("dashboardDate").value = localDateKey();
+}
+
+function dashboardRecordsForDate(db, dateKey){
+  return db.records.filter(r => localDateKey(r.createdAt) === dateKey);
+}
+
+function latestRecordByWorker(records){
+  const map = new Map();
+  records.forEach(r => {
+    const prev = map.get(r.workerId);
+    if (!prev || new Date(r.createdAt) > new Date(prev.createdAt)) map.set(r.workerId, r);
+  });
+  return map;
+}
+
+function populateDashboardFilters(db){
+  const sites = [...new Set(db.workers.map(w => w.site).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  const teams = [...new Set(db.workers.map(w => w.team).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));
+  const setOptions = (id, values, label) => {
+    const el = $(id);
+    if (!el) return;
+    const current = el.value;
+    el.innerHTML = `<option value="">${label}</option>` + values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    el.value = values.includes(current) ? current : "";
+  };
+  setOptions("dashboardSite", sites, "全現場");
+  setOptions("dashboardTeam", teams, "全班");
+}
+
+function filteredDashboardWorkers(db){
+  const site = $("dashboardSite")?.value || "";
+  const team = $("dashboardTeam")?.value || "";
+  const search = ($("dashboardSearch")?.value || "").trim().toLowerCase();
+  return db.workers.filter(w =>
+    (!site || w.site === site) &&
+    (!team || w.team === team) &&
+    (!search || `${w.name || ""} ${w.id || ""}`.toLowerCase().includes(search))
+  );
+}
+
+function renderDashboard(){
+  if (!$("view-dashboard")) return;
+  ensureDashboardDefaults();
+  const db = loadDB();
+  populateDashboardFilters(db);
+
+  const dateKey = $("dashboardDate").value || localDateKey();
+  const dayRecords = dashboardRecordsForDate(db, dateKey);
+  const latest = latestRecordByWorker(dayRecords);
+  const workers = filteredDashboardWorkers(db);
+  const requestedLevel = $("dashboardLevel").value;
+
+  const statusRows = workers.map(worker => {
+    const record = latest.get(worker.id);
+    return {
+      worker,
+      record,
+      level: record?.level || "unmeasured"
+    };
+  });
+
+  const displayedRows = statusRows
+    .filter(row => !requestedLevel || row.level === requestedLevel)
+    .sort((a,b) => {
+      const riskDiff = (levelRank[b.level] || 0) - (levelRank[a.level] || 0);
+      if (riskDiff) return riskDiff;
+      const at = a.record ? new Date(a.record.createdAt).getTime() : 0;
+      const bt = b.record ? new Date(b.record.createdAt).getTime() : 0;
+      return bt - at || String(a.worker.name).localeCompare(String(b.worker.name),"ja");
+    });
+
+  const counts = {green:0, yellow:0, orange:0, red:0, unmeasured:0};
+  statusRows.forEach(row => counts[row.level] = (counts[row.level] || 0) + 1);
+
+  $("kpiWorkers").textContent = statusRows.length;
+  $("kpiMeasured").textContent = statusRows.length - counts.unmeasured;
+  $("kpiUnmeasured").textContent = counts.unmeasured;
+  $("kpiYellow").textContent = counts.yellow;
+  $("kpiOrange").textContent = counts.orange;
+  $("kpiRed").textContent = counts.red;
+
+  const dangerCount = counts.red + counts.orange;
+  const alert = $("dashboardAlert");
+  if (dangerCount > 0) {
+    alert.className = "dashboard-alert";
+    alert.innerHTML = `<strong>優先確認：</strong>「作業中止」${counts.red}人、「警戒」${counts.orange}人です。本人への声掛けと管理者による対面確認を行ってください。`;
+  } else {
+    alert.className = "dashboard-alert hidden";
+    alert.textContent = "";
+  }
+
+  const selectedScope = [
+    $("dashboardSite").value || "全現場",
+    $("dashboardTeam").value || "全班"
+  ].join("／");
+  $("dashboardSummary").textContent =
+    `${dateKey}　${selectedScope}　対象${statusRows.length}人・表示${displayedRows.length}人`;
+
+  $("dashboardWorkerCards").innerHTML = displayedRows.length ? displayedRows.map(({worker, record, level}) => {
+    const condition = record?.conditionAI || {};
+    const wbgt = record?.wbgt;
+    const note = level === "unmeasured"
+      ? "本日の測定記録がありません。"
+      : record?.summary || record?.aiComment || "測定結果を確認してください。";
+    return `<article class="worker-status-card status-${levelClass(level)}">
+      <div class="worker-card-head">
+        <div>
+          <strong>${esc(worker.name || worker.id)}</strong>
+          <span>${esc(worker.id)}／${esc(worker.site || "現場未設定")}／${esc(worker.team || "班未設定")}</span>
+        </div>
+        <span class="level-badge level-${levelClass(level)}">${level === "unmeasured" ? "未測定" : LEVELS[level]}</span>
+      </div>
+      <div class="worker-card-metrics">
+        <div><span>最終測定</span><strong>${record ? formatTime(record.createdAt) : "—"}</strong></div>
+        <div><span>WBGT</span><strong>${wbgt ?? "—"}</strong></div>
+        <div><span>疲労点</span><strong>${record ? scoreOrDash(condition.fatigueRisk) : "—"}</strong></div>
+        <div><span>寝不足点</span><strong>${record ? scoreOrDash(condition.sleepRisk) : "—"}</strong></div>
+      </div>
+      <p>${esc(note)}</p>
+      ${record ? `<button type="button" class="dashboard-detail-btn" data-record-id="${esc(record.id || "")}" data-worker-id="${esc(worker.id)}">履歴で確認</button>` : ""}
+    </article>`;
+  }).join("") : '<div class="empty-state">条件に該当する作業員はいません。</div>';
+
+  document.querySelectorAll(".dashboard-detail-btn").forEach(button => {
+    button.onclick = () => {
+      $("historyWorker").value = button.dataset.workerId;
+      document.querySelector('[data-view="history"]')?.click();
+      render();
+    };
+  });
+
+  const priority = statusRows
+    .filter(row => ["red","orange","yellow"].includes(row.level))
+    .sort((a,b)=>(levelRank[b.level]||0)-(levelRank[a.level]||0))
+    .slice(0,12);
+
+  $("priorityList").innerHTML = priority.length ? priority.map(({worker,record,level}, index) =>
+    `<div class="priority-row priority-${level}">
+      <span class="priority-number">${index + 1}</span>
+      <div><strong>${esc(worker.name || worker.id)}</strong><small>${esc(worker.site || "—")}／${esc(worker.team || "—")}・${record ? formatTime(record.createdAt) : "—"}</small></div>
+      <span class="level-badge level-${level}">${LEVELS[level]}</span>
+    </div>`
+  ).join("") : '<div class="empty-state compact">要確認者はいません。</div>';
+
+  const groupMap = new Map();
+  statusRows.forEach(({worker,level}) => {
+    const key = `${worker.site || "現場未設定"}｜${worker.team || "班未設定"}`;
+    const item = groupMap.get(key) || {site:worker.site || "現場未設定", team:worker.team || "班未設定", total:0, measured:0, attention:0};
+    item.total++;
+    if (level !== "unmeasured") item.measured++;
+    if (["red","orange","yellow"].includes(level)) item.attention++;
+    groupMap.set(key,item);
+  });
+  const groups = [...groupMap.values()].sort((a,b)=>b.attention-a.attention || a.site.localeCompare(b.site,"ja"));
+  $("groupSummary").innerHTML = groups.length ? groups.map(g =>
+    `<div class="group-row">
+      <div><strong>${esc(g.site)}</strong><small>${esc(g.team)}</small></div>
+      <div><span>${g.measured}/${g.total}測定</span><strong class="${g.attention ? "attention-text" : ""}">${g.attention}要確認</strong></div>
+    </div>`
+  ).join("") : '<div class="empty-state compact">対象データがありません。</div>';
+
+  const workerIds = new Set(workers.map(w=>w.id));
+  const recent = dayRecords
+    .filter(r => workerIds.has(r.workerId))
+    .sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
+    .slice(0,8);
+  $("recentMeasurements").innerHTML = recent.length ? recent.map(r =>
+    `<div class="recent-row">
+      <span class="level-dot dot-${levelClass(r.level)}"></span>
+      <div><strong>${esc(r.workerName || r.workerId)}</strong><small>${formatTime(r.createdAt)}／${esc(r.site || "—")}</small></div>
+      <span>${LEVELS[r.level] || "—"}</span>
+    </div>`
+  ).join("") : '<div class="empty-state compact">本日の測定記録はありません。</div>';
+}
+
+["dashboardDate","dashboardSite","dashboardTeam","dashboardLevel"].forEach(id => {
+  $(id)?.addEventListener("change", renderDashboard);
+});
+$("dashboardSearch")?.addEventListener("input", renderDashboard);
+$("dashboardToday")?.addEventListener("click", () => {
+  $("dashboardDate").value = localDateKey();
+  renderDashboard();
+});
+$("dashboardRefresh")?.addEventListener("click", () => {
+  window.HeatCheckCloud?.manualSync?.();
+  renderDashboard();
+});
+$("dashboardPrint")?.addEventListener("click", () => window.print());
+window.addEventListener("heatcheck:updated", renderDashboard);
+setInterval(() => {
+  if ($("view-dashboard")?.classList.contains("active")) renderDashboard();
+}, 60000);
+
+window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"13.3-dashboard"};
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 render();

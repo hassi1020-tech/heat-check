@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
-  <title>現場 AIコンディションチェック Ver.13.2 ログイン状態取得修正版</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1320authstate">
-  <link rel="stylesheet" href="styles.css?v=1320authstate">
+  <title>現場 AIコンディションチェック Ver.13.3 現場管理画面強化版</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1330dashboard">
+  <link rel="stylesheet" href="styles.css?v=1330dashboard">
 </head>
 <body>
 <header>
@@ -14,11 +14,12 @@
     <h1>現場 AIコンディションチェック</h1>
     <p>非接触スクリーニング／体調変化の補助検知</p>
   </div>
-  <span class="version">Ver.13.2 ログイン状態取得修正版</span>
+  <span class="version">Ver.13.3 現場管理画面強化版</span>
 </header>
 
 <nav>
-  <button class="tab active" data-view="measure">測定</button>
+  <button class="tab active" data-view="dashboard">現場管理</button>
+  <button class="tab" data-view="measure">測定</button>
   <button class="tab" data-view="workers">作業員</button>
   <button class="tab" data-view="history">履歴</button>
   <button class="tab" data-view="settings">設定</button>
@@ -40,7 +41,76 @@
 
 
 <main>
-<section id="view-measure" class="view active">
+
+<section id="view-dashboard" class="view active">
+  <section class="dashboard-toolbar card">
+    <div>
+      <h2>現場管理ダッシュボード</h2>
+      <p class="note">当日の測定状況と要確認者を一覧で確認します。診断ではなく、管理者による声掛け・再確認を支援する画面です。</p>
+    </div>
+    <div class="dashboard-filter-grid">
+      <label>対象日<input id="dashboardDate" type="date"></label>
+      <label>現場<select id="dashboardSite"><option value="">全現場</option></select></label>
+      <label>班<select id="dashboardTeam"><option value="">全班</option></select></label>
+      <label>表示対象
+        <select id="dashboardLevel">
+          <option value="">全判定</option>
+          <option value="red">作業中止</option>
+          <option value="orange">警戒</option>
+          <option value="yellow">注意</option>
+          <option value="green">通常</option>
+          <option value="unmeasured">未測定</option>
+        </select>
+      </label>
+    </div>
+    <div class="dashboard-actions">
+      <button id="dashboardToday" class="primary">本日表示</button>
+      <button id="dashboardRefresh">再集計</button>
+      <button id="dashboardPrint">印刷</button>
+    </div>
+  </section>
+
+  <section class="kpi-grid" aria-label="当日の集計">
+    <article class="kpi-card kpi-total"><span>登録作業員</span><strong id="kpiWorkers">0</strong><small>人</small></article>
+    <article class="kpi-card kpi-measured"><span>測定済み</span><strong id="kpiMeasured">0</strong><small>人</small></article>
+    <article class="kpi-card kpi-unmeasured"><span>未測定</span><strong id="kpiUnmeasured">0</strong><small>人</small></article>
+    <article class="kpi-card kpi-caution"><span>注意</span><strong id="kpiYellow">0</strong><small>人</small></article>
+    <article class="kpi-card kpi-warning"><span>警戒</span><strong id="kpiOrange">0</strong><small>人</small></article>
+    <article class="kpi-card kpi-stop"><span>作業中止</span><strong id="kpiRed">0</strong><small>人</small></article>
+  </section>
+
+  <section id="dashboardAlert" class="dashboard-alert hidden" role="alert"></section>
+
+  <div class="dashboard-layout">
+    <article class="card dashboard-main">
+      <div class="row-between dashboard-heading">
+        <div>
+          <h2>作業員ステータス</h2>
+          <small id="dashboardSummary">集計中</small>
+        </div>
+        <label class="dashboard-search">氏名・ID検索<input id="dashboardSearch" type="search" placeholder="例：山田 / A001"></label>
+      </div>
+      <div id="dashboardWorkerCards" class="worker-status-grid"></div>
+    </article>
+
+    <aside>
+      <article class="card">
+        <h2>優先確認リスト</h2>
+        <div id="priorityList"></div>
+      </article>
+      <article class="card">
+        <h2>現場・班別状況</h2>
+        <div id="groupSummary"></div>
+      </article>
+      <article class="card">
+        <h2>直近の測定</h2>
+        <div id="recentMeasurements"></div>
+      </article>
+    </aside>
+  </div>
+</section>
+
+<section id="view-measure" class="view">
   <div class="grid">
     <article class="card">
       <h2>1. 測定対象</h2>
@@ -170,11 +240,11 @@
 </section>
 </main>
 
-<footer>Prototype Ver.13.2 ログイン状態取得修正版／口元AIは使用しません。</footer>
-<script type="module" src="face-landmarker.js?v=1320authstate"></script>
-<script src="app.js?v=1320authstate"></script>
-<script src="device-mode.js?v=1320authstate"></script>
-<script src="firebase-config.js?v=1320authstate"></script>
-<script type="module" src="firebase-cloud.js?v=1320authstate"></script>
+<footer>Prototype Ver.13.3 現場管理画面強化版／口元AIは使用しません。</footer>
+<script type="module" src="face-landmarker.js?v=1330dashboard"></script>
+<script src="app.js?v=1330dashboard"></script>
+<script src="device-mode.js?v=1330dashboard"></script>
+<script src="firebase-config.js?v=1330dashboard"></script>
+<script type="module" src="firebase-cloud.js?v=1330dashboard"></script>
 </body>
 </html>
