@@ -7,7 +7,7 @@ const mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let stream=null,measuring=false;
 
-function defaults(){return {version:"13.5.1-quickresult-fix",workers:[],records:[],settings:{duration:15,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
+function defaults(){return {version:"14.0-ui-renewal",workers:[],records:[],settings:{duration:15,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(DB_KEY)||"{}");return {...defaults(),...x,workers:Array.isArray(x.workers)?x.workers:[],records:Array.isArray(x.records)?x.records:[],settings:{...defaults().settings,...x.settings}}}catch{return defaults()}}
 function saveDB(db){localStorage.setItem(DB_KEY,JSON.stringify({...db,updatedAt:new Date().toISOString()}));window.dispatchEvent(new CustomEvent("heatcheck:updated"))}
 const uid=()=>crypto.randomUUID?.()||Date.now()+"-"+Math.random();
@@ -312,55 +312,90 @@ function quickRecommendations(r){
   if(!list.length)list.push("通常どおり本人の状態を確認");
   return [...new Set(list)].slice(0,5);
 }
-function renderQuickResult(r){
-  const panel=$("quickResultPanel");
-  if(!r||!panel)return;
 
-  const color=quickStatus(r.ai?.colorRisk),expression=quickStatus(r.ai?.expressionRisk),
-        blink=quickStatus(r.conditionAI?.blinkPatternRisk,"blink"),
-        sleep=quickStatus(r.conditionAI?.sleepRisk,"sleep"),overall=quickLevel(r.level);
-
-  const setText=(id,text)=>{
-    const el=$(id);
-    if(el)el.textContent=text;
-  };
-  const put=(id,x)=>{
-    const el=$(id);
-    if(!el)return;
-    el.textContent=`${x.icon} ${x.label}`;
-    el.className=`quick-${x.cls}`;
-  };
-
-  put("quickColor",color);
-  put("quickExpression",expression);
-  put("quickBlink",blink);
-  put("quickSleep",sleep);
-
-  setText("quickFatigue",`${riskToScore(r.conditionAI?.fatigueRisk||0)}点`);
-  setText("quickHeat",`${overall.icon} ${overall.label}`);
-  setText("quickConfidence",`判定信頼度 ${r.conditionAI?.assessmentConfidence??r.quality??0}%`);
-
-  const badge=$("quickOverallBadge");
-  if(badge){
-    badge.textContent=`${overall.icon} ${overall.label}`;
-    badge.className=`quick-overall-badge quick-bg-${overall.cls}`;
-  }
-
-  setText("quickOverallTitle",overall.cls==="green"?"大きな変化はありません":"確認が必要です");
-
-  const rec=$("quickRecommendations");
-  if(rec){
-    rec.innerHTML=quickRecommendations(r)
-      .map(x=>`<label><input type="checkbox" disabled><span>${esc(x)}</span></label>`).join("");
-  }
-
-  panel.classList.remove("hidden");
-
-  const detail=$("detailedResultCard");
-  if(detail)detail.classList.add("hidden");
-
-  setText("toggleDetailedResult","詳しい測定値を表示");
+function v14RiskState(risk){
+  const n=Number(risk)||0;
+  if(n>=75)return {key:"red",label:"危険"};
+  if(n>=55)return {key:"orange",label:"警戒"};
+  if(n>=35)return {key:"yellow",label:"注意"};
+  return {key:"green",label:"正常"};
 }
+function v14QualityState(score){
+  const n=Number(score)||0;
+  if(n>=80)return {key:"green",label:"良好"};
+  if(n>=60)return {key:"yellow",label:"注意"};
+  if(n>=40)return {key:"orange",label:"警戒"};
+  return {key:"red",label:"再測定"};
+}
+function v14SetText(id,text){const el=$(id);if(el)el.textContent=text}
+function v14SetCard(id,state){
+  const el=$(id);if(!el)return;
+  el.classList.remove("v14-state-green","v14-state-yellow","v14-state-orange","v14-state-red");
+  el.classList.add(`v14-state-${state.key}`);
+}
+function v14SetDetail(prefix,state,note,score){
+  v14SetText(`v14${prefix}Status`,`● ${state.label}`);
+  const status=$(`v14${prefix}Status`);if(status)status.className=`quick-${state.key}`;
+  v14SetText(`v14${prefix}Note`,note);v14SetText(`v14${prefix}Score`,score);
+}
+function v14Stars(score){
+  const n=Math.max(1,Math.min(5,Math.ceil((Number(score)||0)/20)));
+  return "★".repeat(n)+"☆".repeat(5-n);
+}
+function v14Overall(level){
+  return ({
+    green:{key:"green",label:"正常",message:"大きな変化はありません。",action:"通常どおり本人の状態を確認してください。",work:"作業可能"},
+    yellow:{key:"yellow",label:"注意",message:"軽度の変化があります。休憩・再確認を行ってください。",action:"水分補給と休憩を取りましょう。",work:"管理者確認後作業"},
+    orange:{key:"orange",label:"警戒",message:"疲労や体調変化が推定されます。作業を一旦止めてください。",action:"休憩後に管理者確認と再測定を行ってください。",work:"一時作業中断"},
+    red:{key:"red",label:"危険",message:"強い疲労または体調変化が推定されます。",action:"作業を開始・継続せず、管理者へ連絡してください。",work:"作業中止"}
+  })[level]||{key:"yellow",label:"注意",message:"状態を確認してください。",action:"休憩と再測定を行ってください。",work:"管理者確認後作業"};
+}
+function v14Recommendations(r){
+  const items=[],c=r.conditionAI||{};
+  if(r.level!=="green"||Number(r.wbgt)>=25)items.push(["💧","水分補給"]);
+  if(r.level!=="green"||(Number(c.fatigueRisk)||0)>=35)items.push(["🌳","日陰で休憩"]);
+  if(r.level!=="green"||c.retestRequired)items.push(["↻","15分後再測定"]);
+  if(r.level==="orange"||r.level==="red"||(Number(c.sleepRisk)||0)>=55)items.push(["👷","管理者へ報告"]);
+  if(!items.length)items.push(["✓","通常作業"]);
+  return items.slice(0,4);
+}
+function renderQuickResult(r){
+  if(!r||!$("result"))return;
+  const c=r.conditionAI||{},ai=r.ai||{},overall=v14Overall(r.level);
+  const color=v14RiskState(ai.colorRisk),expression=v14RiskState(ai.expressionRisk);
+  const blink=v14RiskState(Math.max(Number(c.blinkPatternRisk)||0,Number(c.sleepRisk)||0));
+  const fatigue=v14RiskState(c.fatigueRisk),sweat=v14RiskState(ai.sweatRisk||0);
+  const eye=v14RiskState(ai.eyeRisk||0),sleep=v14RiskState(c.sleepRisk);
+  const focus=v14RiskState(c.focusRisk||0),condition=v14RiskState(c.conditionRisk||0);
+  const confidence=Number(c.assessmentConfidence??r.quality??0),quality=v14QualityState(confidence);
+  const fatigueScore=riskToScore(c.fatigueRisk||0);
+
+  const hero=$("resultHero");
+  if(hero){hero.className=`v14-summary-card v14-state-${overall.key}`;}
+  v14SetText("resultLevel",overall.label);v14SetText("resultSummary",overall.message);
+  v14SetText("v14SummaryAction",overall.action);v14SetText("v14WorkPermission",overall.work);
+  v14SetText("v14WorkMessage",overall.key==="green"?"本人確認後、作業してください":"状態を確認して判断してください");
+  v14SetText("v14MeasuredAt",r.createdAt?new Date(r.createdAt).toLocaleString("ja-JP"):"");
+  v14SetText("v14WorkerName",r.workerName||r.workerId||"");
+  const dot=$("v14OverallDot");if(dot)dot.className=`v14-dot v14-dot-${overall.key}`;
+
+  v14SetCard("v14CardColor",color);v14SetText("v14ColorStatus",`● ${color.label}`);v14SetText("v14ColorNote",color.key==="green"?"良好です":"顔色に変化があります");
+  v14SetCard("v14CardExpression",expression);v14SetText("v14ExpressionStatus",`● ${expression.label}`);v14SetText("v14ExpressionNote",expression.key==="green"?"問題ありません":"表情に変化があります");
+  v14SetCard("v14CardBlink",blink);v14SetText("v14BlinkStatus",`● ${blink.label}`);v14SetText("v14BlinkNote",blink.key==="green"?"問題ありません":"瞬き・眠気に変化があります");
+  v14SetCard("v14CardFatigue",fatigue);v14SetText("v14FatigueStatus",`● ${fatigue.label}`);v14SetText("v14FatigueNote",fatigue.key==="green"?"疲労傾向は低いです":"疲労傾向があります");
+
+  v14SetText("v14FatigueScore",`${fatigueScore}点`);v14SetText("v14FatigueStars",v14Stars(fatigueScore));
+  const needle=$("v14GaugeNeedle");if(needle)needle.style.left=`${Math.max(0,Math.min(100,fatigueScore))}%`;
+  const rec=$("v14Recommendations");if(rec)rec.innerHTML=v14Recommendations(r).map(([i,t])=>`<div class="v14-recommend-item"><span>${i}</span><b>${esc(t)}</b></div>`).join("");
+
+  v14SetDetail("Sweat",sweat,sweat.key==="green"?"発汗の大きな変化はありません":"発汗傾向に変化があります",`${riskToScore(ai.sweatRisk||0)}点`);
+  v14SetDetail("Eye",eye,eye.key==="green"?"目の開き・状態は良好です":"目の状態に変化があります",`${riskToScore(ai.eyeRisk||0)}点`);
+  v14SetDetail("Sleep",sleep,sleep.key==="green"?"寝不足傾向は低いです":"寝不足の可能性があります",`${riskToScore(c.sleepRisk||0)}点`);
+  v14SetDetail("Focus",focus,focus.key==="green"?"集中力は維持されています":"集中力低下の可能性があります",`${riskToScore(c.focusRisk||0)}点`);
+  v14SetDetail("Condition",condition,condition.key==="green"?"体調の大きな変化はありません":"体調に変化が見られます",`${riskToScore(c.conditionRisk||0)}点`);
+  v14SetDetail("Quality",quality,quality.key==="green"?"測定品質は良好です":"照明・顔位置を確認してください",`信頼度 ${confidence}%`);
+}
+
 $("toggleDetailedResult")?.addEventListener("click",()=>{
   const d=$("detailedResultCard");
   const btn=$("toggleDetailedResult");
@@ -617,6 +652,6 @@ setInterval(() => {
   if ($("view-dashboard")?.classList.contains("active")) renderDashboard();
 }, 60000);
 
-window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"13.5.1-quickresult-fix"};
+window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"14.0-ui-renewal"};
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 render();

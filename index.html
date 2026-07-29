@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
-  <title>現場 AIコンディションチェック Ver.13.5.1 測定エラー修正版</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1351quickfix">
-  <link rel="stylesheet" href="styles.css?v=1351quickfix">
+  <title>現場 AIコンディションチェック Ver.14.0 UIリニューアル版</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1400ui">
+  <link rel="stylesheet" href="styles.css?v=1400ui">
 </head>
 <body>
 <header>
@@ -14,7 +14,7 @@
     <h1>現場 AIコンディションチェック</h1>
     <p>非接触スクリーニング／体調変化の補助検知</p>
   </div>
-  <span class="version">Ver.13.5.1 測定エラー修正版</span>
+  <span class="version">Ver.14.0 UIリニューアル版</span>
 </header>
 
 <nav>
@@ -160,55 +160,122 @@
     </article>
   </div>
 
-  <article id="result" class="card hidden result">
-    <div id="resultHero" class="hero">
-      <span>総合判定</span><strong id="resultLevel">—</strong>
-      <p id="resultSummary"></p>
+  
+<article id="result" class="card hidden result v14-result">
+  <header class="v14-result-header">
+    <div class="v14-brand">AIコンディション判定</div>
+    <div class="v14-header-meta">
+      <span id="v14MeasuredAt">—</span>
+      <span id="v14WorkerName">—</span>
+    </div>
+  </header>
+
+  <section id="resultHero" class="v14-summary-card v14-state-yellow">
+    <div id="v14FaceGraphic" class="v14-main-face" aria-hidden="true">
+      <div class="v14-face-eyes"><i></i><i></i></div>
+      <div class="v14-face-mouth"></div>
+      <span class="v14-face-sweat">💧</span>
     </div>
 
-    <h3>AIコンディション評価</h3>
-    <div class="score-grid">
-      <div><span>顔色</span><strong id="scoreColor">—</strong></div>
-      <div><span>発汗傾向</span><strong id="scoreSweat">—</strong></div>
-      <div><span>表情</span><strong id="scoreExpression">—</strong></div>
-      <div><span>目の状態</span><strong id="scoreEye">—</strong></div>
-      <div class="condition-ai"><span>疲労傾向</span><strong id="scoreFatigue">—</strong></div>
-      <div class="condition-ai"><span>寝不足傾向</span><strong id="scoreSleep">—</strong></div>
-      <div class="condition-ai"><span>体調変化</span><strong id="scoreCondition">—</strong></div>
-      <div class="condition-ai"><span>集中力低下</span><strong id="scoreFocus">—</strong></div>
-      <div class="condition-ai enhanced-score"><span>瞬き・閉眼変化</span><strong id="scoreBlink">—</strong></div>
-      <div class="condition-ai enhanced-score"><span>判定信頼度</span><strong id="scoreConfidence">—</strong></div>
+    <div class="v14-summary-main">
+      <span class="v14-label">総合判定</span>
+      <div class="v14-summary-level">
+        <span id="v14OverallDot" class="v14-dot v14-dot-yellow"></span>
+        <strong id="resultLevel">注意</strong>
+      </div>
+      <p id="resultSummary">軽度の変化があります。休憩・再確認を行ってください。</p>
+      <p id="v14SummaryAction" class="v14-emphasis">水分補給と休憩を取りましょう。</p>
     </div>
 
-    <section id="confidenceBox" class="confidence-box">
-      <h3>判定品質</h3>
-      <p id="confidenceMessage">測定品質を確認しています。</p>
-      <div class="confidence-bar"><span id="confidenceBar"></span></div>
+    <div class="v14-work-card">
+      <span>作業可否</span>
+      <strong id="v14WorkPermission">管理者確認後作業</strong>
+      <small id="v14WorkMessage">状態を確認して判断してください</small>
+    </div>
+  </section>
+
+  <section class="v14-condition-section">
+    <h3>AIコンディション <span>常時表示</span></h3>
+    <div class="v14-condition-grid">
+      <article id="v14CardColor" class="v14-condition-card v14-state-green">
+        <h4>顔色</h4>
+        <div class="v14-mini-face v14-face-happy"><i></i><i></i><b></b></div>
+        <strong id="v14ColorStatus">● 正常</strong>
+        <small id="v14ColorNote">良好です</small>
+      </article>
+      <article id="v14CardExpression" class="v14-condition-card v14-state-green">
+        <h4>表情</h4>
+        <div class="v14-mini-face v14-face-smile"><i></i><i></i><b></b></div>
+        <strong id="v14ExpressionStatus">● 正常</strong>
+        <small id="v14ExpressionNote">問題ありません</small>
+      </article>
+      <article id="v14CardBlink" class="v14-condition-card v14-state-yellow">
+        <h4>瞬き・眠気</h4>
+        <div class="v14-mini-face v14-face-sleep"><i></i><i></i><b></b><em>zzz</em></div>
+        <strong id="v14BlinkStatus">● 注意</strong>
+        <small id="v14BlinkNote">瞬き・眠気に変化があります</small>
+      </article>
+      <article id="v14CardFatigue" class="v14-condition-card v14-state-red">
+        <h4>疲労</h4>
+        <div class="v14-mini-face v14-face-tired"><i></i><i></i><b></b><em>💧</em></div>
+        <strong id="v14FatigueStatus">● 危険</strong>
+        <small id="v14FatigueNote">疲労傾向があります</small>
+      </article>
+    </div>
+  </section>
+
+  <div class="v14-lower-grid">
+    <section class="v14-fatigue-box">
+      <h3>疲労指数</h3>
+      <div class="v14-fatigue-score-row">
+        <strong id="v14FatigueScore">—点</strong>
+        <span id="v14FatigueStars">☆☆☆☆☆</span>
+      </div>
+      <div class="v14-gauge">
+        <div class="v14-gauge-track"></div>
+        <div id="v14GaugeNeedle" class="v14-gauge-needle" style="left:0%"></div>
+      </div>
+      <div class="v14-gauge-labels"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
     </section>
 
-    <section class="baseline-box">
-      <h3>本人通常値との比較</h3>
-      <p id="baselineStatus">比較データを確認中です。</p>
-      <div id="baselineMetrics" class="baseline-grid"></div>
+    <section class="v14-recommend-box">
+      <h3>推奨対応</h3>
+      <div id="v14Recommendations" class="v14-recommend-grid"></div>
     </section>
+  </div>
 
-    <section>
-      <h3>AIコメント</h3>
-      <div id="aiComment" class="ai-comment"></div>
-    </section>
+  <details id="v14Details" class="v14-details">
+    <summary>詳細AI解析 <span>タップして表示／非表示</span></summary>
+    <div class="v14-detail-list">
+      <div class="v14-detail-row"><span>💧</span><b>発汗傾向</b><strong id="v14SweatStatus">—</strong><small id="v14SweatNote">—</small><em id="v14SweatScore">—</em></div>
+      <div class="v14-detail-row"><span>👁</span><b>目の状態</b><strong id="v14EyeStatus">—</strong><small id="v14EyeNote">—</small><em id="v14EyeScore">—</em></div>
+      <div class="v14-detail-row"><span>🌙</span><b>寝不足傾向</b><strong id="v14SleepStatus">—</strong><small id="v14SleepNote">—</small><em id="v14SleepScore">—</em></div>
+      <div class="v14-detail-row"><span>🎯</span><b>集中力低下</b><strong id="v14FocusStatus">—</strong><small id="v14FocusNote">—</small><em id="v14FocusScore">—</em></div>
+      <div class="v14-detail-row"><span>❤</span><b>体調変化</b><strong id="v14ConditionStatus">—</strong><small id="v14ConditionNote">—</small><em id="v14ConditionScore">—</em></div>
+      <div class="v14-detail-row"><span>🛡</span><b>判定品質・信頼度</b><strong id="v14QualityStatus">—</strong><small id="v14QualityNote">—</small><em id="v14Confidence">—</em></div>
+    </div>
+  </details>
 
-    <section>
-      <h3>今やること</h3>
-      <ul id="actions"></ul>
-    </section>
+  <div class="v14-legend">
+    <b>判定の見方</b>
+    <span><i class="v14-dot v14-dot-green"></i>正常</span>
+    <span><i class="v14-dot v14-dot-yellow"></i>注意</span>
+    <span><i class="v14-dot v14-dot-orange"></i>警戒</span>
+    <span><i class="v14-dot v14-dot-red"></i>危険</span>
+  </div>
 
-    <details>
-      <summary>解析詳細</summary>
-      <div id="details" class="detail-grid"></div>
-    </details>
+  <p class="v14-disclaimer">※本判定はAIによる推定であり、医療診断ではありません。本人の訴えと管理者判断を優先してください。</p>
 
-    <p class="warning">本機能は、熱中症・疲労・寝不足・病気・意識状態を診断するものではありません。本人の訴えと管理者判断を優先してください。</p>
-  </article>
+  <!-- 既存処理との互換性維持用（画面には表示しない） -->
+  <div class="v14-legacy-hidden" aria-hidden="true">
+    <div id="scoreColor"></div><div id="scoreSweat"></div><div id="scoreExpression"></div><div id="scoreEye"></div>
+    <div id="scoreFatigue"></div><div id="scoreSleep"></div><div id="scoreCondition"></div><div id="scoreFocus"></div>
+    <div id="scoreBlink"></div><div id="scoreConfidence"></div>
+    <div id="confidenceBox"><p id="confidenceMessage"></p><span id="confidenceBar"></span></div>
+    <p id="baselineStatus"></p><div id="baselineMetrics"></div><div id="aiComment"></div><ul id="actions"></ul><div id="details"></div>
+  </div>
+</article>
+
 </section>
 
 <section id="view-workers" class="view">
@@ -252,11 +319,11 @@
 </section>
 </main>
 
-<footer>Prototype Ver.13.5.1 測定エラー修正版／口元AIは使用しません。</footer>
-<script type="module" src="face-landmarker.js?v=1351quickfix"></script>
-<script src="app.js?v=1351quickfix"></script>
-<script src="device-mode.js?v=1351quickfix"></script>
-<script src="firebase-config.js?v=1351quickfix"></script>
-<script type="module" src="firebase-cloud.js?v=1351quickfix"></script>
+<footer>Prototype Ver.14.0 UIリニューアル版／口元AIは使用しません。</footer>
+<script type="module" src="face-landmarker.js?v=1400ui"></script>
+<script src="app.js?v=1400ui"></script>
+<script src="device-mode.js?v=1400ui"></script>
+<script src="firebase-config.js?v=1400ui"></script>
+<script type="module" src="firebase-cloud.js?v=1400ui"></script>
 </body>
 </html>
