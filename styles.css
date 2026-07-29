@@ -251,3 +251,106 @@
 @media(max-width:820px){
  .v14-result-header{align-items:flex-start}.v14-header-meta{flex-direction:column;gap:2px;text-align:right}.v14-summary-card{grid-template-columns:90px 1fr}.v14-main-face{width:78px;height:78px;border-width:4px}.v14-face-eyes{gap:17px;padding-top:27px}.v14-face-eyes i{width:8px;height:12px}.v14-face-mouth{left:27px;top:51px;width:22px}.v14-face-sweat{font-size:21px}.v14-work-card{grid-column:1/-1}.v14-condition-grid{grid-template-columns:repeat(2,1fr)}.v14-lower-grid{grid-template-columns:1fr}.v14-recommend-grid{grid-template-columns:repeat(2,1fr)}.v14-detail-row{grid-template-columns:28px 1fr auto}.v14-detail-row small{grid-column:2/4}.v14-detail-row em{grid-column:3}.v14-legend{display:grid;grid-template-columns:1fr 1fr}
 }
+
+
+/* ===== Ver.14.1 全国アラート地図 ===== */
+.national-alert-map-card{
+  margin-top:18px;
+  padding:18px;
+}
+.national-alert-map-heading{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:16px;
+  margin-bottom:14px;
+}
+.national-alert-map-heading h2{margin:0 0 4px}
+.national-alert-official-link{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:42px;
+  padding:8px 14px;
+  border:1px solid #17894c;
+  border-radius:10px;
+  color:#0d6f3b;
+  background:#f1fbf5;
+  font-weight:800;
+  text-decoration:none;
+  white-space:nowrap;
+}
+.national-alert-map-frame{
+  position:relative;
+  width:100%;
+  min-height:610px;
+  overflow:hidden;
+  border:1px solid #d9e5e1;
+  border-radius:14px;
+  background:#f5f8f7;
+}
+.national-alert-map-frame iframe{
+  position:absolute;
+  top:-230px;
+  left:0;
+  width:100%;
+  height:1080px;
+  border:0;
+  background:#fff;
+  z-index:2;
+}
+.national-alert-map-fallback{
+  position:absolute;
+  inset:0;
+  z-index:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:24px;
+  text-align:center;
+  color:#51625f;
+}
+.national-alert-map-fallback strong{font-size:1.25rem}
+.national-alert-map-fallback a{
+  padding:10px 16px;
+  border-radius:10px;
+  background:#17894c;
+  color:#fff;
+  font-weight:800;
+  text-decoration:none;
+}
+.national-alert-map-footer{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:14px;
+  margin-top:12px;
+  font-size:.86rem;
+}
+.national-alert-map-footer span{display:flex;align-items:center;gap:6px}
+.national-alert-map-footer small{margin-left:auto;color:#667573}
+.alert-legend{display:inline-block;width:14px;height:14px;border-radius:50%}
+.alert-legend.special{background:#8e44ad}
+.alert-legend.alert{background:#e74c3c}
+.alert-legend.wbgt{background:#f4c542}
+
+@media(max-width:760px){
+  .national-alert-map-heading{flex-direction:column}
+  .national-alert-official-link{width:100%}
+  .national-alert-map-frame{min-height:520px}
+  .national-alert-map-frame iframe{
+    top:-185px;
+    width:125%;
+    height:960px;
+    transform:scale(.8);
+    transform-origin:top left;
+  }
+  .national-alert-map-footer small{width:100%;margin-left:0}
+}
+
+@media print{
+  .national-alert-map-card{break-inside:avoid}
+  .national-alert-map-frame{min-height:520px}
+}

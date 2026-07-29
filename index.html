@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
-  <title>現場 AIコンディションチェック Ver.14.0 UIリニューアル版</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1400ui">
-  <link rel="stylesheet" href="styles.css?v=1400ui">
+  <title>現場 AIコンディションチェック Ver.14.1 全国アラート地図追加版</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1410alertmap">
+  <link rel="stylesheet" href="styles.css?v=1410alertmap">
 </head>
 <body>
 <header>
@@ -14,7 +14,7 @@
     <h1>現場 AIコンディションチェック</h1>
     <p>非接触スクリーニング／体調変化の補助検知</p>
   </div>
-  <span class="version">Ver.14.0 UIリニューアル版</span>
+  <span class="version">Ver.14.1 全国アラート地図追加版</span>
 </header>
 
 <nav>
@@ -108,6 +108,44 @@
       </article>
     </aside>
   </div>
+
+  <article id="nationalHeatAlertMapCard" class="card national-alert-map-card">
+    <div class="national-alert-map-heading">
+      <div>
+        <h2>全国 熱中症警戒情報</h2>
+        <p class="note">環境省「熱中症特別警戒アラート・熱中症警戒アラート」当日の全国地図</p>
+      </div>
+      <a class="national-alert-official-link"
+         href="https://www.wbgt.env.go.jp/alert.php"
+         target="_blank"
+         rel="noopener noreferrer">環境省公式ページを開く</a>
+    </div>
+
+    <div class="national-alert-map-frame">
+      <iframe
+        id="nationalHeatAlertMap"
+        title="環境省 全国熱中症警戒アラート地図"
+        src="https://www.wbgt.env.go.jp/alert.php"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"></iframe>
+
+      <div id="nationalAlertMapFallback" class="national-alert-map-fallback">
+        <strong>全国アラート地図</strong>
+        <p>公式地図を読み込んでいます。表示されない場合は、環境省公式ページをご確認ください。</p>
+        <a href="https://www.wbgt.env.go.jp/alert.php"
+           target="_blank"
+           rel="noopener noreferrer">公式地図を表示</a>
+      </div>
+    </div>
+
+    <div class="national-alert-map-footer">
+      <span><i class="alert-legend special"></i>熱中症特別警戒アラート</span>
+      <span><i class="alert-legend alert"></i>熱中症警戒アラート</span>
+      <span><i class="alert-legend wbgt"></i>日最高暑さ指数31以上</span>
+      <small>出典：環境省 熱中症予防情報サイト</small>
+    </div>
+  </article>
+
 </section>
 
 <section id="view-measure" class="view">
@@ -319,11 +357,11 @@
 </section>
 </main>
 
-<footer>Prototype Ver.14.0 UIリニューアル版／口元AIは使用しません。</footer>
-<script type="module" src="face-landmarker.js?v=1400ui"></script>
-<script src="app.js?v=1400ui"></script>
-<script src="device-mode.js?v=1400ui"></script>
-<script src="firebase-config.js?v=1400ui"></script>
-<script type="module" src="firebase-cloud.js?v=1400ui"></script>
+<footer>Prototype Ver.14.1 全国アラート地図追加版／口元AIは使用しません。</footer>
+<script type="module" src="face-landmarker.js?v=1410alertmap"></script>
+<script src="app.js?v=1410alertmap"></script>
+<script src="device-mode.js?v=1410alertmap"></script>
+<script src="firebase-config.js?v=1410alertmap"></script>
+<script type="module" src="firebase-cloud.js?v=1410alertmap"></script>
 </body>
 </html>

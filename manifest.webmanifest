@@ -1,7 +1,7 @@
 {
-  "name": "現場 AIコンディションチェック Ver.14.0 UIリニューアル版",
-  "short_name": "AIチェック Ver14",
-  "start_url": "./?mode=admin&v=1400ui",
+  "name": "現場 AIコンディションチェック Ver.14.1 全国アラート地図追加版",
+  "short_name": "AIチェック Ver14.1",
+  "start_url": "./?mode=admin&v=1410alertmap",
   "display": "standalone",
   "background_color": "#eef5f4",
   "theme_color": "#0f766e"
