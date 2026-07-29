@@ -7,7 +7,7 @@ const mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let stream=null,measuring=false;
 
-function defaults(){return {version:"13.5-quickresult",workers:[],records:[],settings:{duration:15,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
+function defaults(){return {version:"13.5.1-quickresult-fix",workers:[],records:[],settings:{duration:15,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(DB_KEY)||"{}");return {...defaults(),...x,workers:Array.isArray(x.workers)?x.workers:[],records:Array.isArray(x.records)?x.records:[],settings:{...defaults().settings,...x.settings}}}catch{return defaults()}}
 function saveDB(db){localStorage.setItem(DB_KEY,JSON.stringify({...db,updatedAt:new Date().toISOString()}));window.dispatchEvent(new CustomEvent("heatcheck:updated"))}
 const uid=()=>crypto.randomUUID?.()||Date.now()+"-"+Math.random();
@@ -313,25 +313,60 @@ function quickRecommendations(r){
   return [...new Set(list)].slice(0,5);
 }
 function renderQuickResult(r){
+  const panel=$("quickResultPanel");
+  if(!r||!panel)return;
+
   const color=quickStatus(r.ai?.colorRisk),expression=quickStatus(r.ai?.expressionRisk),
         blink=quickStatus(r.conditionAI?.blinkPatternRisk,"blink"),
         sleep=quickStatus(r.conditionAI?.sleepRisk,"sleep"),overall=quickLevel(r.level);
-  const put=(id,x)=>{const e=$(id);e.textContent=`${x.icon} ${x.label}`;e.className=`quick-${x.cls}`};
-  put("quickColor",color);put("quickExpression",expression);put("quickBlink",blink);put("quickSleep",sleep);
-  $("quickFatigue").textContent=`${riskToScore(r.conditionAI?.fatigueRisk||0)}点`;
-  $("quickHeat").textContent=`${overall.icon} ${overall.label}`;
-  $("quickConfidence").textContent=`判定信頼度 ${r.conditionAI?.assessmentConfidence??r.quality??0}%`;
-  $("quickOverallBadge").textContent=`${overall.icon} ${overall.label}`;
-  $("quickOverallBadge").className=`quick-overall-badge quick-bg-${overall.cls}`;
-  $("quickOverallTitle").textContent=overall.cls==="green"?"大きな変化はありません":"確認が必要です";
-  $("quickRecommendations").innerHTML=quickRecommendations(r).map(x=>`<label><input type="checkbox" disabled><span>${esc(x)}</span></label>`).join("");
-  $("quickResultPanel").classList.remove("hidden");
-  $("detailedResultCard")?.classList.add("hidden");
-  $("toggleDetailedResult").textContent="詳しい測定値を表示";
+
+  const setText=(id,text)=>{
+    const el=$(id);
+    if(el)el.textContent=text;
+  };
+  const put=(id,x)=>{
+    const el=$(id);
+    if(!el)return;
+    el.textContent=`${x.icon} ${x.label}`;
+    el.className=`quick-${x.cls}`;
+  };
+
+  put("quickColor",color);
+  put("quickExpression",expression);
+  put("quickBlink",blink);
+  put("quickSleep",sleep);
+
+  setText("quickFatigue",`${riskToScore(r.conditionAI?.fatigueRisk||0)}点`);
+  setText("quickHeat",`${overall.icon} ${overall.label}`);
+  setText("quickConfidence",`判定信頼度 ${r.conditionAI?.assessmentConfidence??r.quality??0}%`);
+
+  const badge=$("quickOverallBadge");
+  if(badge){
+    badge.textContent=`${overall.icon} ${overall.label}`;
+    badge.className=`quick-overall-badge quick-bg-${overall.cls}`;
+  }
+
+  setText("quickOverallTitle",overall.cls==="green"?"大きな変化はありません":"確認が必要です");
+
+  const rec=$("quickRecommendations");
+  if(rec){
+    rec.innerHTML=quickRecommendations(r)
+      .map(x=>`<label><input type="checkbox" disabled><span>${esc(x)}</span></label>`).join("");
+  }
+
+  panel.classList.remove("hidden");
+
+  const detail=$("detailedResultCard");
+  if(detail)detail.classList.add("hidden");
+
+  setText("toggleDetailedResult","詳しい測定値を表示");
 }
 $("toggleDetailedResult")?.addEventListener("click",()=>{
-  const d=$("detailedResultCard"),hidden=d.classList.toggle("hidden");
-  $("toggleDetailedResult").textContent=hidden?"詳しい測定値を表示":"詳しい測定値を閉じる";
+  const d=$("detailedResultCard");
+  const btn=$("toggleDetailedResult");
+  if(!d||!btn)return;
+  const hidden=d.classList.toggle("hidden");
+  btn.textContent=hidden?"詳しい測定値を表示":"詳しい測定値を閉じる";
 });
 
 function show(r,b){
@@ -582,6 +617,6 @@ setInterval(() => {
   if ($("view-dashboard")?.classList.contains("active")) renderDashboard();
 }, 60000);
 
-window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"13.5-quickresult"};
+window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"13.5.1-quickresult-fix"};
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 render();
