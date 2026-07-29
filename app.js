@@ -7,7 +7,7 @@ const mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let stream=null,measuring=false;
 
-function defaults(){return {version:"13.0-final",workers:[],records:[],settings:{duration:10,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
+function defaults(){return {version:"13.1-auth",workers:[],records:[],settings:{duration:10,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(DB_KEY)||"{}");return {...defaults(),...x,workers:Array.isArray(x.workers)?x.workers:[],records:Array.isArray(x.records)?x.records:[],settings:{...defaults().settings,...x.settings}}}catch{return defaults()}}
 function saveDB(db){localStorage.setItem(DB_KEY,JSON.stringify({...db,updatedAt:new Date().toISOString()}));window.dispatchEvent(new CustomEvent("heatcheck:updated"))}
 const uid=()=>crypto.randomUUID?.()||Date.now()+"-"+Math.random();
@@ -197,6 +197,6 @@ $("importJson").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new
 $("clearRecords").onclick=()=>{if(confirm("測定履歴を全削除しますか？")){const db=loadDB();db.records=[];saveDB(db);render()}};
 $("exportCsv").onclick=()=>{const q=v=>`"${String(v??"").replace(/"/g,'""')}"`,db=loadDB(),head=["日時","作業員ID","氏名","現場","班","判定","WBGT","体調申告","睡眠申告","水分","顔色点","発汗点","表情点","目点","疲労点","寝不足点","体調変化点","集中力点","開眼率","瞬き/分","最大閉眼ms","通常値成立"];const rows=db.records.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level],r.wbgt,r.condition,r.sleep,r.hydration,riskToScore(r.ai.colorRisk),riskToScore(r.ai.sweatRisk),riskToScore(r.ai.expressionRisk),riskToScore(r.ai.eyeRisk),riskToScore(r.conditionAI.fatigueRisk),riskToScore(r.conditionAI.sleepRisk),riskToScore(r.conditionAI.conditionRisk),riskToScore(r.conditionAI.focusRisk),r.ai.openness,r.ai.blinkRate,r.ai.maxClosureMs,r.baseline?.ready?"済":"未"]);download("heat-check-v12-stage4.csv","\ufeff"+[head,...rows].map(a=>a.map(q).join(",")).join("\n"),"text/csv")};
 
-window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"13.0-final"};
+window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"13.1-auth"};
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 render();

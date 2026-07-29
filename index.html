@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f766e">
-  <title>現場 AIコンディションチェック Ver.13.0 Firebase完全同期版</title>
-  <link rel="manifest" href="manifest.webmanifest?v=1300final">
-  <link rel="stylesheet" href="styles.css?v=1300final">
+  <title>現場 AIコンディションチェック Ver.13.1 Googleログイン安定版</title>
+  <link rel="manifest" href="manifest.webmanifest?v=1310auth">
+  <link rel="stylesheet" href="styles.css?v=1310auth">
 </head>
 <body>
 <header>
@@ -14,7 +14,7 @@
     <h1>現場 AIコンディションチェック</h1>
     <p>非接触スクリーニング／体調変化の補助検知</p>
   </div>
-  <span class="version">Ver.13.0 Firebase完全同期版</span>
+  <span class="version">Ver.13.1 Googleログイン安定版</span>
 </header>
 
 <nav>
@@ -31,7 +31,7 @@
     <small id="cloudUser">Googleアカウント未ログイン</small>
   </div>
   <div class="cloud-actions">
-    <button id="cloudLogin" type="button">Googleログイン</button>
+    <button id="cloudLogin" type="button">Googleログイン</button><span class="cloud-login-hint">クリック後、Google画面へ移動して認証します。</span>
     <button id="cloudLogout" type="button" class="hidden">ログアウト</button>
     <button id="cloudManualSync" type="button">今すぐ同期</button>
   </div>
@@ -170,11 +170,11 @@
 </section>
 </main>
 
-<footer>Prototype Ver.13.0 Firebase完全同期版／口元AIは使用しません。</footer>
-<script type="module" src="face-landmarker.js?v=1300final"></script>
-<script src="app.js?v=1300final"></script>
-<script src="device-mode.js?v=1300final"></script>
-<script src="firebase-config.js?v=1300final"></script>
-<script type="module" src="firebase-cloud.js?v=1300final"></script>
+<footer>Prototype Ver.13.1 Googleログイン安定版／口元AIは使用しません。</footer>
+<script type="module" src="face-landmarker.js?v=1310auth"></script>
+<script src="app.js?v=1310auth"></script>
+<script src="device-mode.js?v=1310auth"></script>
+<script src="firebase-config.js?v=1310auth"></script>
+<script type="module" src="firebase-cloud.js?v=1310auth"></script>
 </body>
 </html>

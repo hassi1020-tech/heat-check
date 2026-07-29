@@ -125,3 +125,5 @@
   .cloud-actions button{min-height:44px;padding:8px}
   #cloudManualSync{grid-column:1/-1}
 }
+
+.cloud-login-hint{font-size:.78rem;color:#52646b;margin-left:.45rem;display:inline-block}

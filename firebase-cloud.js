@@ -1,7 +1,8 @@
 import {initializeApp} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup,
-  signInWithRedirect, getRedirectResult, signOut
+  getAuth, GoogleAuthProvider, onAuthStateChanged,
+  signInWithRedirect, getRedirectResult, signOut,
+  setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, setDoc, onSnapshot,
@@ -264,22 +265,25 @@ async function saveSettings(settings) {
 
 async function login() {
   if (!configured) {
-    setStatus("error", "設定未完了", "Firebase設定値が入力されていません。");
+    setStatus("error", "設定未完了", "firebase-config.jsの設定値を確認してください。");
     return;
   }
+
   try {
-    await signInWithPopup(auth, provider);
+    setStatus("syncing", "Googleへ移動中", "Googleログイン画面へ移動します。");
+    sessionStorage.setItem("heatCheckLoginStarted", "1");
+    await setPersistence(auth, browserLocalPersistence);
+    await signInWithRedirect(auth, provider);
   } catch (error) {
-    const redirectCodes = [
-      "auth/popup-blocked",
-      "auth/cancelled-popup-request",
-      "auth/operation-not-supported-in-this-environment"
-    ];
-    if (redirectCodes.includes(error.code)) {
-      await signInWithRedirect(auth, provider);
-      return;
-    }
-    setStatus("error", "ログイン失敗", `Googleログインに失敗しました：${error.message}`);
+    console.error("Firebase Google login error:", error);
+    sessionStorage.removeItem("heatCheckLoginStarted");
+
+    const details = [
+      `コード：${error.code || "不明"}`,
+      `内容：${error.message || "不明"}`
+    ].join("／");
+
+    setStatus("error", "ログイン失敗", `Googleログインを開始できませんでした。${details}`);
   }
 }
 
@@ -303,14 +307,41 @@ if (!configured) {
     const app = initializeApp(config);
     auth = getAuth(app);
     firestore = getFirestore(app);
+    await setPersistence(auth, browserLocalPersistence);
 
     enableIndexedDbPersistence(firestore).catch(error => {
       console.info("Firestoreオフライン永続化:", error.code);
     });
 
-    getRedirectResult(auth).catch(error => {
-      setStatus("error", "ログイン失敗", `リダイレクトログインに失敗しました：${error.message}`);
-    });
+    getRedirectResult(auth)
+      .then(result => {
+        if (result?.user) {
+          sessionStorage.removeItem("heatCheckLoginStarted");
+          setStatus("syncing", "認証完了", "Firebaseへ接続しています。");
+        } else if (sessionStorage.getItem("heatCheckLoginStarted") === "1") {
+          sessionStorage.removeItem("heatCheckLoginStarted");
+        }
+      })
+      .catch(error => {
+        console.error("Firebase redirect result error:", error);
+        sessionStorage.removeItem("heatCheckLoginStarted");
+
+        const code = error.code || "不明";
+        const message = error.message || "不明";
+        const guidance = {
+          "auth/unauthorized-domain": "Firebase Authenticationの承認済みドメインへ hassi1020-tech.github.io を追加してください。",
+          "auth/operation-not-allowed": "Firebase AuthenticationでGoogleプロバイダを有効にしてください。",
+          "auth/api-key-not-valid.-please-pass-a-valid-api-key.": "Firebase ConsoleのWebアプリ設定からAPIキーをコピーし直してください。",
+          "auth/invalid-api-key": "Firebase ConsoleのWebアプリ設定からAPIキーをコピーし直してください。",
+          "auth/internal-error": "Google Cloud側のAPIキー制限またはOAuth設定を確認してください。"
+        }[code] || "ブラウザのConsoleに表示されるエラーコードを確認してください。";
+
+        setStatus(
+          "error",
+          "ログイン失敗",
+          `Google認証エラー（${code}）：${message} ${guidance}`
+        );
+      });
 
     onAuthStateChanged(auth, async currentUser => {
       user = currentUser;

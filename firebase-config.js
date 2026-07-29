@@ -1,6 +1,6 @@
 /*
  現場AIコンディションチェック
- Firebase project: sample1-8011f
+ Firebase project: sample1-8011f / Ver.13.1
 
  この設定値はFirebase Web SDK用の公開設定値です。
  データ保護はFirestore Security Rulesで行います。
