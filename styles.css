@@ -209,3 +209,18 @@
 .confidence-bar{height:12px;background:#dce9e7;border-radius:999px;overflow:hidden}
 .confidence-bar span{display:block;height:100%;width:0;background:#0f766e;transition:width .35s}
 .low-confidence .confidence-bar span{background:#f97316}
+
+.quick-result-panel{margin:18px 0;padding:18px;border-radius:18px;background:#fff;border:2px solid #d9e7e4;box-shadow:0 10px 28px #0f3d3718}
+.quick-result-title{display:flex;justify-content:space-between;gap:12px;align-items:center;padding-bottom:14px;border-bottom:1px solid #e3ecea}
+.quick-kicker{font-size:.8rem;font-weight:900;color:#0f766e;letter-spacing:.05em}.quick-result-title h2{margin:4px 0 0;font-size:1.35rem}
+.quick-overall-badge{font-weight:900;font-size:1.05rem;border-radius:999px;padding:10px 15px}
+.quick-bg-green{background:#dcfce7;color:#166534}.quick-bg-yellow{background:#fef9c3;color:#854d0e}.quick-bg-orange{background:#ffedd5;color:#9a3412}.quick-bg-red{background:#fee2e2;color:#991b1b}
+.quick-status-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.quick-status-item{padding:14px 10px;border-radius:12px;background:#f6faf9;text-align:center;border:1px solid #e0ebe9}
+.quick-status-item span{display:block;font-size:.8rem;color:#5f7471;font-weight:800;margin-bottom:6px}.quick-status-item strong{font-size:1rem}
+.quick-green{color:#166534}.quick-yellow{color:#a16207}.quick-orange{color:#c2410c}.quick-red{color:#b91c1c}
+.quick-score-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0 16px}.quick-score-block{border-radius:14px;padding:18px;text-align:center;background:#eef7f5;border:1px solid #cfe3df}
+.quick-score-block span,.quick-score-block small{display:block}.quick-score-block span{font-size:.85rem;font-weight:900;color:#526864}.quick-score-block strong{display:block;font-size:2rem;line-height:1.2;margin:7px 0}.quick-score-block small{color:#6a7d79}
+.quick-actions-box{background:#f8faf9;border:1px solid #dde8e6;border-radius:14px;padding:14px}.quick-actions-box h3{margin:0 0 9px}.quick-recommendations{display:grid;gap:7px}
+.quick-recommendations label{display:flex;align-items:center;gap:9px;padding:8px 10px;background:#fff;border-radius:9px}.quick-recommendations input{width:18px;height:18px;margin:0}
+.quick-detail-toggle{width:100%;margin-top:14px;background:#fff;color:#0f766e;border:1px solid #89bdb4}
+@media(max-width:700px){.quick-status-grid{grid-template-columns:repeat(2,1fr)}.quick-score-row{grid-template-columns:1fr}.quick-result-title{align-items:flex-start}.quick-overall-badge{font-size:.9rem;padding:8px 10px}}

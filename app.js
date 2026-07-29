@@ -7,7 +7,7 @@ const mean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let stream=null,measuring=false;
 
-function defaults(){return {version:"13.4-conditionai",workers:[],records:[],settings:{duration:15,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
+function defaults(){return {version:"13.5-quickresult",workers:[],records:[],settings:{duration:15,baselineCount:10,baselineMin:5,wbgtYellow:28,wbgtOrange:31}}}
 function loadDB(){try{const x=JSON.parse(localStorage.getItem(DB_KEY)||"{}");return {...defaults(),...x,workers:Array.isArray(x.workers)?x.workers:[],records:Array.isArray(x.records)?x.records:[],settings:{...defaults().settings,...x.settings}}}catch{return defaults()}}
 function saveDB(db){localStorage.setItem(DB_KEY,JSON.stringify({...db,updatedAt:new Date().toISOString()}));window.dispatchEvent(new CustomEvent("heatcheck:updated"))}
 const uid=()=>crypto.randomUUID?.()||Date.now()+"-"+Math.random();
@@ -275,7 +275,67 @@ async function measure(){
 }
 $("startMeasure").onclick=measure;
 
+
+function quickStatus(risk,type="normal"){
+  const n=Number(risk)||0;
+  if(type==="blink"){
+    if(n>=70)return {icon:"🔴",label:"要確認",cls:"red"};
+    if(n>=45)return {icon:"🟡",label:"少なめ・変化あり",cls:"yellow"};
+    return {icon:"🟢",label:"正常",cls:"green"};
+  }
+  if(type==="sleep"){
+    if(n>=70)return {icon:"🔴",label:"強い眠気傾向",cls:"red"};
+    if(n>=45)return {icon:"🟡",label:"やや眠気傾向",cls:"yellow"};
+    return {icon:"🟢",label:"問題なし",cls:"green"};
+  }
+  if(n>=70)return {icon:"🔴",label:"要確認",cls:"red"};
+  if(n>=45)return {icon:"🟡",label:"注意",cls:"yellow"};
+  return {icon:"🟢",label:"正常",cls:"green"};
+}
+function quickLevel(level){
+  return ({
+    green:{icon:"🟢",label:"通常",cls:"green"},
+    yellow:{icon:"🟡",label:"注意",cls:"yellow"},
+    orange:{icon:"🟠",label:"警戒",cls:"orange"},
+    red:{icon:"🔴",label:"作業中止・確認",cls:"red"}
+  })[level]||{icon:"🟡",label:"注意",cls:"yellow"};
+}
+function quickRecommendations(r){
+  const list=[],c=r.conditionAI||{},wbgt=Number(r.wbgt)||0;
+  if(r.level!=="green"||wbgt>=25)list.push("水分・塩分を補給");
+  if(r.level!=="green"||c.fatigueRisk>=45)list.push("日陰または休憩所で休憩");
+  if(c.sleepRisk>=45||c.blinkPatternRisk>=45)list.push("危険作業前に管理者が対面確認");
+  if(r.level==="yellow")list.push("15分後に再測定");
+  if(r.level==="orange")list.push("作業を一旦中断し、休憩後に再測定");
+  if(r.level==="red")list.push("作業を開始・継続せず、管理者へ連絡");
+  if(c.retestRequired)list.push("照明と顔位置を整えて再測定");
+  if(!list.length)list.push("通常どおり本人の状態を確認");
+  return [...new Set(list)].slice(0,5);
+}
+function renderQuickResult(r){
+  const color=quickStatus(r.ai?.colorRisk),expression=quickStatus(r.ai?.expressionRisk),
+        blink=quickStatus(r.conditionAI?.blinkPatternRisk,"blink"),
+        sleep=quickStatus(r.conditionAI?.sleepRisk,"sleep"),overall=quickLevel(r.level);
+  const put=(id,x)=>{const e=$(id);e.textContent=`${x.icon} ${x.label}`;e.className=`quick-${x.cls}`};
+  put("quickColor",color);put("quickExpression",expression);put("quickBlink",blink);put("quickSleep",sleep);
+  $("quickFatigue").textContent=`${riskToScore(r.conditionAI?.fatigueRisk||0)}点`;
+  $("quickHeat").textContent=`${overall.icon} ${overall.label}`;
+  $("quickConfidence").textContent=`判定信頼度 ${r.conditionAI?.assessmentConfidence??r.quality??0}%`;
+  $("quickOverallBadge").textContent=`${overall.icon} ${overall.label}`;
+  $("quickOverallBadge").className=`quick-overall-badge quick-bg-${overall.cls}`;
+  $("quickOverallTitle").textContent=overall.cls==="green"?"大きな変化はありません":"確認が必要です";
+  $("quickRecommendations").innerHTML=quickRecommendations(r).map(x=>`<label><input type="checkbox" disabled><span>${esc(x)}</span></label>`).join("");
+  $("quickResultPanel").classList.remove("hidden");
+  $("detailedResultCard")?.classList.add("hidden");
+  $("toggleDetailedResult").textContent="詳しい測定値を表示";
+}
+$("toggleDetailedResult")?.addEventListener("click",()=>{
+  const d=$("detailedResultCard"),hidden=d.classList.toggle("hidden");
+  $("toggleDetailedResult").textContent=hidden?"詳しい測定値を表示":"詳しい測定値を閉じる";
+});
+
 function show(r,b){
+  renderQuickResult(r);
   $("result").classList.remove("hidden");$("resultHero").className="hero "+r.level;$("resultLevel").textContent=LEVELS[r.level];
   $("resultSummary").textContent=r.level==="green"?"現時点で大きな異常兆候は確認されていません。":r.level==="yellow"?"軽度の変化があります。休憩・再確認を行ってください。":r.level==="orange"?"作業を中断し、管理者が本人を確認してください。":"直ちに作業を中止し、本人の訴えを確認してください。";
   const map={scoreColor:r.ai.colorRisk,scoreSweat:r.ai.sweatRisk,scoreExpression:r.ai.expressionRisk,scoreEye:r.ai.eyeRisk,scoreFatigue:r.conditionAI.fatigueRisk,scoreSleep:r.conditionAI.sleepRisk,scoreCondition:r.conditionAI.conditionRisk,scoreFocus:r.conditionAI.focusRisk,scoreBlink:r.conditionAI.blinkPatternRisk};
@@ -306,7 +366,7 @@ function download(name,text,type){const a=document.createElement("a");a.href=URL
 $("exportJson").onclick=()=>download("heat-check-v12-stage4-backup.json",JSON.stringify(loadDB(),null,2),"application/json");
 $("importJson").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!Array.isArray(x.records)||!Array.isArray(x.workers))throw Error();saveDB({...defaults(),...x});render();window.HeatCheckCloud?.manualSync?.();alert("復元しました。Firebaseログイン中の場合はクラウドにも同期します。")}catch{alert("復元できません。")}};rd.readAsText(f);e.target.value=""};
 $("clearRecords").onclick=()=>{if(confirm("測定履歴を全削除しますか？")){const db=loadDB();db.records=[];saveDB(db);render()}};
-$("exportCsv").onclick=()=>{const q=v=>`"${String(v??"").replace(/"/g,'""')}"`,db=loadDB(),head=["日時","作業員ID","氏名","現場","班","判定","WBGT","体調申告","睡眠申告","水分","顔色点","発汗点","表情点","目点","疲労点","寝不足点","体調変化点","集中力点","開眼率","瞬き/分","閉眼割合%","平均閉眼ms","最大閉眼ms","0.5秒以上閉眼","瞬き閉眼点","判定信頼度","通常値成立"];const rows=db.records.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level],r.wbgt,r.condition,r.sleep,r.hydration,riskToScore(r.ai.colorRisk),riskToScore(r.ai.sweatRisk),riskToScore(r.ai.expressionRisk),riskToScore(r.ai.eyeRisk),riskToScore(r.conditionAI.fatigueRisk),riskToScore(r.conditionAI.sleepRisk),riskToScore(r.conditionAI.conditionRisk),riskToScore(r.conditionAI.focusRisk),r.ai.openness,r.ai.blinkRate,r.ai.perclos,r.ai.avgClosureMs,r.ai.maxClosureMs,r.ai.microSleepCount,riskToScore(r.conditionAI?.blinkPatternRisk||0),r.conditionAI?.assessmentConfidence??r.quality,r.baseline?.ready?"済":"未"]);download("heat-check-v13-4-condition-ai.csv","\ufeff"+[head,...rows].map(a=>a.map(q).join(",")).join("\n"),"text/csv")};
+$("exportCsv").onclick=()=>{const q=v=>`"${String(v??"").replace(/"/g,'""')}"`,db=loadDB(),head=["日時","作業員ID","氏名","現場","班","判定","WBGT","体調申告","睡眠申告","水分","顔色点","発汗点","表情点","目点","疲労点","寝不足点","体調変化点","集中力点","開眼率","瞬き/分","閉眼割合%","平均閉眼ms","最大閉眼ms","0.5秒以上閉眼","瞬き閉眼点","判定信頼度","通常値成立"];const rows=db.records.map(r=>[r.createdAt,r.workerId,r.workerName,r.site,r.team,LEVELS[r.level],r.wbgt,r.condition,r.sleep,r.hydration,riskToScore(r.ai.colorRisk),riskToScore(r.ai.sweatRisk),riskToScore(r.ai.expressionRisk),riskToScore(r.ai.eyeRisk),riskToScore(r.conditionAI.fatigueRisk),riskToScore(r.conditionAI.sleepRisk),riskToScore(r.conditionAI.conditionRisk),riskToScore(r.conditionAI.focusRisk),r.ai.openness,r.ai.blinkRate,r.ai.perclos,r.ai.avgClosureMs,r.ai.maxClosureMs,r.ai.microSleepCount,riskToScore(r.conditionAI?.blinkPatternRisk||0),r.conditionAI?.assessmentConfidence??r.quality,r.baseline?.ready?"済":"未"]);download("heat-check-v13-5-quick-result.csv","\ufeff"+[head,...rows].map(a=>a.map(q).join(",")).join("\n"),"text/csv")};
 
 
 
@@ -522,6 +582,6 @@ setInterval(() => {
   if ($("view-dashboard")?.classList.contains("active")) renderDashboard();
 }, 60000);
 
-window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"13.4-conditionai"};
+window.HeatCheckApp={loadDB,saveDB,refresh:render,version:"13.5-quickresult"};
 window.addEventListener("beforeunload",()=>stream?.getTracks().forEach(t=>t.stop()));
 render();
