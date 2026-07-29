@@ -6,7 +6,7 @@
  データ保護はFirestore Security Rulesで行います。
 */
 window.HEAT_CHECK_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAp9TvNqCuUS9U171Vcv6fQ7Ddy0UQMaA",
+  apiKey: "AIzaSyAp9TvNqCuUS9U17Y1vcf6fQ7Ddy0uQMaA",
   authDomain: "sample1-8011f.firebaseapp.com",
   projectId: "sample1-8011f",
   storageBucket: "sample1-8011f.firebasestorage.app",
