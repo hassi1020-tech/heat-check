@@ -1,7 +1,7 @@
 {
-  "name": "現場 AIコンディションチェック Ver.13.3 現場管理画面強化版",
-  "short_name": "AIチェック Ver13.3",
-  "start_url": "./?mode=admin&v=1330dashboard",
+  "name": "現場 AIコンディションチェック Ver.13.4 AIコンディション判定強化版",
+  "short_name": "AIチェック Ver13.4",
+  "start_url": "./?mode=admin&v=1340conditionai",
   "display": "standalone",
   "background_color": "#eef5f4",
   "theme_color": "#0f766e"

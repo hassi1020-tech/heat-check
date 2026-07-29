@@ -187,3 +187,25 @@
   main{max-width:none;padding:0}.card,.kpi-card{box-shadow:none;break-inside:avoid}
   .dashboard-layout{grid-template-columns:2fr 1fr}.worker-status-grid{grid-template-columns:repeat(2,1fr)}
 }
+
+
+/* ===== Ver.13.4 AIコンディション判定強化 ===== */
+.measurement-guide{
+  display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;padding:10px;
+  background:#eef7f5;border:1px solid #c7e2dc;border-radius:10px
+}
+.measurement-guide strong{width:100%;font-size:.85rem}
+.measurement-guide span{
+  font-size:.76rem;background:#fff;border:1px solid #d6e5e2;border-radius:999px;
+  padding:4px 8px
+}
+.enhanced-score{border:2px solid #99d5ca!important}
+.confidence-box{
+  margin:16px 0;padding:14px;border:1px solid #b9ddd6;border-radius:12px;
+  background:#f1faf8
+}
+.confidence-box h3{margin-top:0}
+.confidence-box.low-confidence{background:#fff7ed;border-color:#fdba74}
+.confidence-bar{height:12px;background:#dce9e7;border-radius:999px;overflow:hidden}
+.confidence-bar span{display:block;height:100%;width:0;background:#0f766e;transition:width .35s}
+.low-confidence .confidence-bar span{background:#f97316}
